@@ -1,0 +1,61 @@
+# Default configuration for hyrax-parsnip. Hyrax merges this file automatically
+# whenever the runtime config references a `hyrax_parsnip.*` class.
+
+[model.HyraxParsnip]
+# Pretrained ParSNIP model to start from: a built-in name ("plasticc",
+# "plasticc_photoz", "ps1"), a path to a ParSNIP .pt file, or false to build a
+# fresh (untrained) model from `settings` below.
+pretrained = "plasticc"
+
+# PyTorch device ParSNIP runs on ("cpu", "cuda", ...). Hyrax picks its own device
+# (MPS on Apple silicon), which ParSNIP is not tested on, so by default the wrapper
+# keeps ParSNIP on the CPU. Use "hyrax" to follow Hyrax's device choice.
+device = "cpu"
+
+# Number of torch threads ParSNIP sets at construction.
+threads = 1
+
+# Apply ParSNIP's light-curve augmentation (drop points, time shift, noise,
+# amplitude scaling) in train_batch.
+augment_train = true
+
+# ParSNIP settings overrides used only when `pretrained = false`. Any key from
+# parsnip/settings.py is valid, e.g. latent_size, learning_rate, batch_size.
+[model.HyraxParsnip.settings]
+
+[data_set.ParsnipHATSDataset]
+# Top-level (per-object) columns in the HATS catalog.
+id_column = "object_id"
+redshift_column = "redshift"
+# Milky Way E(B-V) column, or false to assume no MW extinction correction.
+mwebv_column = false
+# Class label column, or false if the catalog is unlabeled.
+label_column = false
+
+# Nested light-curve column and its sub-columns.
+lightcurve_column = "lightcurve"
+time_column = "mjd"
+flux_column = "flux"
+fluxerr_column = "fluxerr"
+band_column = "band"
+
+# Drop objects with fewer usable observations than this.
+min_observations = 3
+
+# Drop objects without a finite redshift. ParSNIP models that don't predict
+# redshift (e.g. "plasticc", "ps1") require one.
+require_redshift = true
+
+# Catalog band name -> sncosmo band name understood by the ParSNIP model.
+# The order here defines the band indices passed between dataset and model, so
+# this must be set globally (not per data_request via dataset_config).
+[data_set.ParsnipHATSDataset.band_map]
+u = "lsstu"
+g = "lsstg"
+r = "lsstr"
+i = "lssti"
+z = "lsstz"
+y = "lssty"
+
+# Extra keyword arguments for lsdb.open_catalog (e.g. search_filter).
+[data_set.ParsnipHATSDataset.open_catalog_kwargs]

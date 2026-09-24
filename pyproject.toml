@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hyrax-parsnip"
+version = "0.1.0"
+description = "Run ParSNIP transient models through Hyrax on HATS light-curve catalogs"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "hyrax>=0.12",
+    "astro-parsnip>=1.4",
+    "lcdata",
+    "lsdb",
+    "nested-pandas",
+    "torch",
+    "lightgbm",
+    "numpy",
+    "astropy",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+hyrax_parsnip = ["*.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
