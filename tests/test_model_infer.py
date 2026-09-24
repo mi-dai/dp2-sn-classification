@@ -46,3 +46,38 @@ def test_matches_native_parsnip(hyrax_instance, hats_catalog):
     row = predictions[predictions["object_id"] == object_id][0]
     for name in ["s1", "s2", "s3", "color", "amplitude", "reference_time", "luminosity"]:
         np.testing.assert_allclose(row[name], expected[name], rtol=1e-4)
+
+
+def test_all_objects_match_native_parsnip_in_large_batches(hyrax_instance, hats_catalog):
+    """Every object keeps its own features when a batch has more than 10 light curves.
+
+    lcdata orders light curves by object_id as a string ("0", "1", "10", ...), which
+    once put features on the wrong objects.
+    """
+    import lcdata
+    from astropy.table import Table
+
+    from hyrax_parsnip import ParsnipHATSDataset
+
+    hyrax_instance.set_config("data_loader.batch_size", N_OBJECTS)
+    configure(hyrax_instance, hats_catalog, pretrained="plasticc")
+    predictions = load_predictions(hyrax_instance.infer())
+
+    dataset = ParsnipHATSDataset(hyrax_instance.config, data_location=hats_catalog)
+    bands = np.array(["lsstu", "lsstg", "lsstr", "lssti", "lsstz", "lssty"])
+    light_curves = []
+    for idx in range(len(dataset)):
+        rows = dataset.get_lightcurve(idx)
+        light_curves.append(
+            Table(
+                {"time": rows[:, 0], "flux": rows[:, 1], "fluxerr": rows[:, 2], "band": bands[rows[:, 3].astype(int)]},
+                meta={"object_id": dataset.get_object_id(idx), "redshift": float(dataset.get_redshift(idx))},
+            )
+        )
+    expected = parsnip.load_model("plasticc", threads=1).predict_dataset(lcdata.from_light_curves(light_curves))
+
+    predictions.sort("object_id")
+    expected.sort("object_id")
+    np.testing.assert_array_equal(np.asarray(predictions["object_id"]), np.asarray(expected["object_id"], dtype=str))
+    for name in ["s1", "s2", "s3", "color", "amplitude", "reference_time", "luminosity"]:
+        np.testing.assert_allclose(predictions[name], expected[name], rtol=1e-4, err_msg=name)

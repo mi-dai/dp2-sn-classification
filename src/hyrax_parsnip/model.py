@@ -218,7 +218,10 @@ class HyraxParsnip(nn.Module):
                 predictions = self.parsnip.predict_dataset(
                     lcdata.from_light_curves([preprocessed[i] for i in valid])
                 )
-            output[valid] = np.stack(
+            # lcdata sorts light curves by object_id as a string ("0", "1", "10", ...), so
+            # place rows by their object_id (the batch position), not by input order.
+            rows = np.asarray(predictions["object_id"]).astype(int)
+            output[rows] = np.stack(
                 [np.asarray(predictions[name], dtype=np.float64) for name in self.feature_names], axis=1
             )
 
