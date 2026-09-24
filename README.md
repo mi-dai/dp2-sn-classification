@@ -92,8 +92,15 @@ classifier = hyrax_parsnip.load_classifier("classifier.pkl")
 probabilities = hyrax_parsnip.classify(classifier, new_predictions)
 ```
 
+ParSNIP's default LightGBM `min_child_weight=1000` suits PLAsTiCC-sized training sets. With only a few
+hundred labeled objects it prevents every split, and all probabilities come out equal. In that case pass a
+smaller value, e.g. `train_classifier(..., min_child_weight=10.0)`.
+
 ## Examples
 
+- `examples/demo_workflow.ipynb`: end-to-end walkthrough on a simulated catalog (SN Ia / II-P / Ib/c from
+  sncosmo): HATS catalog → pretrained inference → latent space → classifier → optional fine-tuning.
+  Install the extras with `.venv/bin/pip install -e ".[notebook]"`.
 - `examples/pretrained_inference.py`: HATS → latents → (train or load) classifier → probabilities.
 - `examples/train_then_infer.py`: train or fine-tune, export, then run inference.
 
