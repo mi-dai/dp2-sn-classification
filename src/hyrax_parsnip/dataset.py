@@ -47,7 +47,11 @@ class ParsnipHATSDataset(HyraxDataset):
 
         kwargs = dict(settings.get("open_catalog_kwargs") or {})
         if "columns" not in kwargs:
-            columns = [settings["id_column"], settings["lightcurve_column"]]
+            # Load only the nested sub-columns in use; survey tables carry many more.
+            nested = [settings[key] for key in ("time_column", "flux_column", "fluxerr_column", "band_column")]
+            nested += list(settings.get("flag_columns") or [])
+            columns = [settings["id_column"]]
+            columns += [f"{settings['lightcurve_column']}.{name}" for name in nested]
             for key in ("redshift_column", "mwebv_column", "label_column"):
                 if settings.get(key):
                     columns.append(settings[key])
@@ -62,16 +66,26 @@ class ParsnipHATSDataset(HyraxDataset):
 
         flat = frame[settings["lightcurve_column"]].nest.to_flat()
         row = flat.index.to_numpy()
-        time = flat[settings["time_column"]].to_numpy(dtype=np.float64)
-        flux = flat[settings["flux_column"]].to_numpy(dtype=np.float64)
-        fluxerr = flat[settings["fluxerr_column"]].to_numpy(dtype=np.float64)
+        time = flat[settings["time_column"]].to_numpy(dtype=np.float64, na_value=np.nan)
+        flux = flat[settings["flux_column"]].to_numpy(dtype=np.float64, na_value=np.nan)
+        fluxerr = flat[settings["fluxerr_column"]].to_numpy(dtype=np.float64, na_value=np.nan)
         band_lookup = {name: i for i, name in enumerate(self.band_names)}
         band_index = (
             flat[settings["band_column"]].astype(str).map(band_lookup).fillna(-1).to_numpy(dtype=np.int64)
         )
 
+        # Convert fluxes to the zeropoint the ParSNIP model was trained with.
+        flux_scale = float(settings.get("flux_scale", 1.0))
+        flux = flux * flux_scale
+        fluxerr = fluxerr * flux_scale
+
+        flagged = np.zeros(len(flat), dtype=bool)
+        for column in settings.get("flag_columns") or []:
+            flagged |= flat[column].fillna(False).to_numpy(dtype=bool)
+
         valid = (
-            (band_index >= 0)
+            ~flagged
+            & (band_index >= 0)
             & np.isfinite(time)
             & np.isfinite(flux)
             & np.isfinite(fluxerr)

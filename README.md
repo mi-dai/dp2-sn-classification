@@ -53,6 +53,30 @@ predictions = hyrax_parsnip.load_predictions(results) # astropy Table, one row p
 that ParSNIP cannot process (e.g. no observations in the model's time window) get NaN
 features rather than being dropped, so object ids stay aligned.
 
+## Without redshifts
+
+The `plasticc` and `ps1` models need a redshift for every object. `plasticc_photoz` predicts it
+from the light curve instead:
+
+```python
+hyrax_parsnip.configure(h, catalog, pretrained="plasticc_photoz")  # also sets require_redshift = false
+h.set_config("data_set.ParsnipHATSDataset.redshift_column", False)
+predictions = hyrax_parsnip.load_predictions(h.infer())             # includes predicted_redshift
+```
+
+The model was trained with a host-galaxy photo-z as an encoder input. Every object gets
+`model.HyraxParsnip.photoz` / `photoz_error` (default 0.5 ± 1.0), a weak prior. On simulated
+SN Ia/II-P/Ib/c at z = 0.03–0.2, this gave Δz/(1+z) = +0.075 ± 0.068 (NMAD), and classification
+accuracy went from 99.7% (true z) to 98%. Hyrax logs a warning about NaN inputs (the missing
+redshifts); the photo-z model ignores them.
+
+### Rubin DIA catalogs
+
+`examples/classify_rubin_dia.py` runs `plasticc_photoz` on a Rubin HATS catalog with nested
+`diaObjectForcedSource` photometry: `psfDiffFlux` in nJy (rescaled with `flux_scale`) with flagged
+points dropped (`flag_columns`). It writes one row per `diaObjectId`, and adds class probabilities
+when you pass `--classifier`.
+
 ## Training (optional)
 
 ```python
@@ -115,8 +139,6 @@ smaller value, e.g. `train_classifier(..., min_child_weight=10.0)`.
   is cheap.
 - **Compatibility shims.** ParSNIP 1.4.3 passes `verbose=` to `LGBMClassifier.fit`,
   which LightGBM ≥ 4 removed. `train_classifier` strips it while training.
-- `plasticc_photoz` (photometric-redshift model) needs host photo-z inputs that the
-  dataset does not provide yet.
 
 ## Tests
 

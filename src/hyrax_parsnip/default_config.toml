@@ -15,6 +15,13 @@ device = "cpu"
 # Number of torch threads ParSNIP sets at construction.
 threads = 1
 
+# Host-galaxy photo-z given to models that predict redshift (e.g. "plasticc_photoz")
+# for every object. They were trained with a per-object host photo-z as an encoder
+# input; with no host information, a large photoz_error acts as a weak prior and
+# the redshift comes from the light curve itself.
+photoz = 0.5
+photoz_error = 1.0
+
 # Apply ParSNIP's light-curve augmentation (drop points, time shift, noise,
 # amplitude scaling) in train_batch.
 augment_train = true
@@ -39,11 +46,21 @@ flux_column = "flux"
 fluxerr_column = "fluxerr"
 band_column = "band"
 
+# Multiplies flux and fluxerr to put them on the zeropoint the model was trained
+# with (27.5 AB for the built-in PLAsTiCC models). For Rubin fluxes in nJy
+# (zeropoint 31.4 AB) use 10**(-0.4 * (31.4 - 27.5)) = 0.027542287.
+flux_scale = 1.0
+
+# Nested boolean sub-columns (e.g. Rubin "psfDiffFlux_flag", "pixelFlags_saturated").
+# Observations with any of them set are dropped.
+flag_columns = []
+
 # Drop objects with fewer usable observations than this.
 min_observations = 3
 
 # Drop objects without a finite redshift. ParSNIP models that don't predict
-# redshift (e.g. "plasticc", "ps1") require one.
+# redshift (e.g. "plasticc", "ps1") require one. `configure` sets this to false for
+# models that predict redshift (e.g. "plasticc_photoz").
 require_redshift = true
 
 # Catalog band name -> sncosmo band name understood by the ParSNIP model.

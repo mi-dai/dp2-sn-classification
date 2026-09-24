@@ -51,3 +51,55 @@ def test_label_column(hyrax_instance, hats_catalog):
     dataset = ParsnipHATSDataset(hyrax_instance.config, data_location=hats_catalog)
 
     assert {dataset.get_label(i) for i in range(len(dataset))} == {"fast", "slow"}
+
+
+def test_rubin_schema_flux_scale_and_flags(hyrax_instance, tmp_path):
+    """Rubin-style catalog: nJy fluxes, quality flags, extra columns, no redshift."""
+    import lsdb
+    import nested_pandas as npd
+    import pandas as pd
+    from conftest import make_catalog_frames
+
+    base, flat = make_catalog_frames()
+    base = base.iloc[:4].assign(diaObjectId=np.arange(4, dtype=np.int64) + 10**15)[["diaObjectId", "ra", "dec"]]
+    flat = flat[flat.index < 4]
+    flag = np.zeros(len(flat), dtype=bool)
+    flag[::2] = True  # every other observation is flagged
+    sources = pd.DataFrame(
+        {
+            "midpointMjdTai": flat["mjd"].to_numpy(),
+            "psfDiffFlux": flat["flux"].to_numpy() / 0.1,  # stored in "nJy" = flux / flux_scale
+            "psfDiffFluxErr": flat["fluxerr"].to_numpy() / 0.1,
+            "band": flat["band"].to_numpy(),
+            "psfDiffFlux_flag": flag,
+            "psfMag": np.zeros(len(flat)),  # unused column
+        },
+        index=flat.index,
+    )
+    nested = npd.NestedFrame(base).join_nested(sources, "diaObjectForcedSource")
+    path = tmp_path / "rubin_like"
+    lsdb.from_dataframe(nested, ra_column="ra", dec_column="dec").write_catalog(path)
+
+    configure(hyrax_instance, path)
+    for key, value in {
+        "id_column": "diaObjectId",
+        "redshift_column": False,
+        "require_redshift": False,
+        "lightcurve_column": "diaObjectForcedSource",
+        "time_column": "midpointMjdTai",
+        "flux_column": "psfDiffFlux",
+        "fluxerr_column": "psfDiffFluxErr",
+        "flux_scale": 0.1,
+        "flag_columns": ["psfDiffFlux_flag"],
+    }.items():
+        hyrax_instance.set_config(f"data_set.ParsnipHATSDataset.{key}", value)
+    dataset = ParsnipHATSDataset(hyrax_instance.config, data_location=path)
+
+    assert len(dataset) == 4
+    idx = [dataset.get_object_id(i) for i in range(4)].index(str(10**15))
+    expected = flat[flat.index == 0].iloc[1::2]  # unflagged observations of object 0
+    lightcurve = dataset.get_lightcurve(idx)
+    np.testing.assert_allclose(lightcurve[:, 0], expected["mjd"])
+    np.testing.assert_allclose(lightcurve[:, 1], expected["flux"])
+    np.testing.assert_allclose(lightcurve[:, 2], expected["fluxerr"])
+    assert np.isnan(dataset.get_redshift(idx))

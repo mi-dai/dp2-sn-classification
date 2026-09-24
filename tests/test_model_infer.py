@@ -81,3 +81,18 @@ def test_all_objects_match_native_parsnip_in_large_batches(hyrax_instance, hats_
     np.testing.assert_array_equal(np.asarray(predictions["object_id"]), np.asarray(expected["object_id"], dtype=str))
     for name in ["s1", "s2", "s3", "color", "amplitude", "reference_time", "luminosity"]:
         np.testing.assert_allclose(predictions[name], expected[name], rtol=1e-4, err_msg=name)
+
+
+def test_photoz_model_without_redshift(hyrax_instance, hats_catalog):
+    """plasticc_photoz predicts redshift, so objects without one are kept and processed."""
+    configure(hyrax_instance, hats_catalog, pretrained="plasticc_photoz")
+    hyrax_instance.set_config("data_set.ParsnipHATSDataset.redshift_column", False)
+    predictions = load_predictions(hyrax_instance.infer())
+
+    # All objects with a usable band are kept, including "no_redshift".
+    assert len(predictions) == N_OBJECTS + 1
+    assert "no_redshift" in set(predictions["object_id"])
+    redshift = np.asarray(predictions["predicted_redshift"])
+    assert np.isfinite(redshift).all()
+    assert (redshift >= 0).all()
+    assert np.isfinite(np.asarray(predictions["s1"])).all()

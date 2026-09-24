@@ -111,6 +111,8 @@ class HyraxParsnip(nn.Module):
         self.band_names = [str(b) for b in config["data_set"]["ParsnipHATSDataset"]["band_map"].values()]
         self.augment_train = bool(settings["augment_train"])
         self.device_setting = str(settings["device"])
+        self.photoz = float(settings["photoz"])
+        self.photoz_error = float(settings["photoz_error"])
 
         self.parsnip = self._build_parsnip(settings)
 
@@ -202,6 +204,13 @@ class HyraxParsnip(nn.Module):
 
         self._sync_device()
         tables = batch_to_tables(*batch, band_names=self.band_names)
+        if self.parsnip.settings["predict_redshift"]:
+            # Photo-z models read these PLAsTiCC-style keys. The host photo-z is an
+            # encoder input only; the redshift itself is predicted from the light curve.
+            for table in tables:
+                table.meta["hostgal_specz"] = table.meta["redshift"]
+                table.meta["hostgal_photoz"] = self.photoz
+                table.meta["hostgal_photoz_err"] = self.photoz_error
         return [preprocess_light_curve(t, self.parsnip.settings, raise_on_invalid=False) for t in tables]
 
     def infer_batch(self, batch):

@@ -52,7 +52,19 @@ def configure(
     }
     h.set_config("data_request", data_request)
 
+    # Models that predict redshift can run on objects without one.
+    h.set_config("data_set.ParsnipHATSDataset.require_redshift", not _predicts_redshift(h, pretrained))
+
     if model_weights_file is None and pretrained:
         model_weights_file = pretrained_model_path(str(pretrained))
     h.set_config("infer.model_weights_file", str(model_weights_file) if model_weights_file else False)
     return h
+
+
+def _predicts_redshift(h, pretrained) -> bool:
+    if not pretrained:
+        return bool(h.config["model"]["HyraxParsnip"]["settings"].get("predict_redshift", False))
+
+    import parsnip
+
+    return bool(parsnip.load_model(pretrained_model_path(str(pretrained)), threads=1).settings["predict_redshift"])
