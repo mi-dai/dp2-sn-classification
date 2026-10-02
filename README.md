@@ -140,6 +140,8 @@ smaller value, e.g. `train_classifier(..., min_child_weight=10.0)`.
   real DP2 visits and written in the DP2 DIA catalog schema: HATS catalog → pretrained inference (with and
   without redshifts) → latent space → classifier → optional fine-tuning. Needs lightcurvelynx (see Install for
   NERSC) and the notebook extras (`.venv/bin/pip install -e ".[notebook]"`).
+- `examples/simulate_dp2.py`: the demo's simulations as a script, e.g.
+  `python examples/simulate_dp2.py data/dp2_sim_sne --n-per-class 5000` for a larger training set.
 - `examples/pretrained_inference.py`: HATS → latents → (train or load) classifier → probabilities.
 - `examples/train_then_infer.py`: train or fine-tune, export, then run inference.
 
