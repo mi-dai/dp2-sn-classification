@@ -36,6 +36,7 @@ import pandas as pd
 import pyarrow as pa
 import sncosmo
 from dustmaps.sfd import SFDQuery
+from joblib.externals.loky import get_reusable_executor
 from lightcurvelynx.astro_utils.dustmap import DustmapWrapper
 from lightcurvelynx.astro_utils.passbands import PassbandGroup
 from lightcurvelynx.astro_utils.snia_utils import (
@@ -179,9 +180,12 @@ def n_detections(flux, fluxerr, flagged, index, detection_snr):
 
 
 def simulate_class(
-    label, model, survey: Survey, n, rng, batch_size=2000, detection_snr=5.0, min_detections=2
+    label, model, survey: Survey, n, rng, batch_size=2000, detection_snr=5.0, min_detections=2, num_jobs=None
 ) -> npd.NestedFrame:
-    """Simulate batches until `n` objects have `min_detections` unsaturated points above `detection_snr`."""
+    """Simulate batches until `n` objects have `min_detections` unsaturated points above `detection_snr`.
+
+    With `num_jobs`, each batch is split over that many worker processes.
+    """
     param_cols = [f"{label}_mwext.ebv"]
     if isinstance(model, RandomMultiObjectModel):
         param_cols.append(f"{label}.selected_object")
@@ -195,6 +199,8 @@ def simulate_class(
             param_cols=param_cols,
             obstable_save_cols=["visitId"],
             rng=rng,
+            num_jobs=num_jobs,
+            executor=get_reusable_executor(max_workers=num_jobs) if num_jobs else None,
         )
         n_simulated += batch_size
         lcs = lcs.drop(columns="params").dropna(subset=["lightcurve"])
@@ -306,6 +312,7 @@ def main():
     parser.add_argument("--noise-scale", type=float, default=1.5, help="Inflate Poisson flux errors by this factor")
     parser.add_argument("--detection-snr", type=float, default=5.0)
     parser.add_argument("--min-detections", type=int, default=2)
+    parser.add_argument("--num-jobs", type=int, help="Worker processes per batch (default: serial)")
     parser.add_argument("--visit-file", default=DP2_VISIT_DETECTOR_FILE, help="DP2 visit-detector parquet")
     parser.add_argument("--dia-catalog", default=DP2_DIA_CATALOG, help="Real DIA catalog for footprint and schema")
     args = parser.parse_args()
@@ -318,6 +325,7 @@ def main():
         batch_size=args.batch_size,
         detection_snr=args.detection_snr,
         min_detections=args.min_detections,
+        num_jobs=args.num_jobs,
     )
     write_catalog(frame, args.output)
     extra = check_schema(args.output, args.dia_catalog)
