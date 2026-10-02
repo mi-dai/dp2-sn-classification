@@ -8,6 +8,30 @@ DATASET_CLASS = "hyrax_parsnip.dataset.ParsnipHATSDataset"
 # Dataset fields the model consumes; see HyraxParsnip.prepare_inputs.
 MODEL_FIELDS = ["lightcurve", "redshift", "mwebv"]
 
+# Rubin fluxes are in nJy (AB zeropoint 31.4); the PLAsTiCC models use zeropoint 27.5.
+NJY_TO_ZP27_5 = 10 ** (-0.4 * (31.4 - 27.5))
+
+# `[data_set.ParsnipHATSDataset]` settings for Rubin DIA catalogs: forced photometry on
+# difference images (`diaObjectForcedSource`), with flagged observations dropped.
+RUBIN_DIA_SETTINGS = {
+    "id_column": "diaObjectId",
+    "redshift_column": False,
+    "lightcurve_column": "diaObjectForcedSource",
+    "time_column": "midpointMjdTai",
+    "flux_column": "psfDiffFlux",
+    "fluxerr_column": "psfDiffFluxErr",
+    "band_column": "band",
+    "flux_scale": NJY_TO_ZP27_5,
+    "flag_columns": [
+        "psfDiffFlux_flag",
+        "invalidPsfFlag",
+        "pixelFlags_saturatedCenter",
+        "pixelFlags_crCenter",
+        "pixelFlags_nodata",
+        "diff_PixelFlags_nodataCenter",
+    ],
+}
+
 
 def configure(
     h,

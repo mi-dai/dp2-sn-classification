@@ -24,28 +24,6 @@ import hyrax_parsnip
 
 DEFAULT_CATALOG = "/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats"
 
-# Rubin fluxes are in nJy (AB zeropoint 31.4); the PLAsTiCC models use zeropoint 27.5.
-NJY_TO_ZP27_5 = 10 ** (-0.4 * (31.4 - 27.5))
-
-RUBIN_DIA_SETTINGS = {
-    "id_column": "diaObjectId",
-    "redshift_column": False,
-    "lightcurve_column": "diaObjectForcedSource",
-    "time_column": "midpointMjdTai",
-    "flux_column": "psfDiffFlux",
-    "fluxerr_column": "psfDiffFluxErr",
-    "band_column": "band",
-    "flux_scale": NJY_TO_ZP27_5,
-    "flag_columns": [
-        "psfDiffFlux_flag",
-        "invalidPsfFlag",
-        "pixelFlags_saturatedCenter",
-        "pixelFlags_crCenter",
-        "pixelFlags_nodata",
-        "diff_PixelFlags_nodataCenter",
-    ],
-}
-
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -61,7 +39,7 @@ def main():
     h.set_config("general.results_dir", args.results_dir)
     h.set_config("data_loader.batch_size", args.batch_size)
     hyrax_parsnip.configure(h, args.catalog, pretrained=args.model)
-    for key, value in RUBIN_DIA_SETTINGS.items():
+    for key, value in hyrax_parsnip.RUBIN_DIA_SETTINGS.items():
         h.set_config(f"data_set.ParsnipHATSDataset.{key}", value)
 
     predictions = hyrax_parsnip.load_predictions(h.infer())

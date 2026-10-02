@@ -21,6 +21,15 @@ python -m venv .venv
 
 On macOS, LightGBM (required by ParSNIP) needs the OpenMP runtime: `brew install libomp`.
 
+At NERSC, build the venv on top of `desc-td-env`, which provides lightcurvelynx for the demo's simulations:
+
+```bash
+/global/common/software/lsst/install/td_env/2026-09-03-32-23/py/envs/td_env/bin/python \
+    -m venv --system-site-packages .venv
+.venv/bin/pip install -e ".[notebook,dev]"
+.venv/bin/python -m ipykernel install --user --name hyrax-parsnip-td --display-name "hyrax-parsnip (td_env)"
+```
+
 ## Catalog format
 
 A nested HATS catalog with one row per object, e.g. as produced by LSDB / nested-pandas:
@@ -75,7 +84,12 @@ redshifts); the photo-z model ignores them.
 `examples/classify_rubin_dia.py` runs `plasticc_photoz` on a Rubin HATS catalog with nested
 `diaObjectForcedSource` photometry: `psfDiffFlux` in nJy (rescaled with `flux_scale`) with flagged
 points dropped (`flag_columns`). It writes one row per `diaObjectId`, and adds class probabilities
-when you pass `--classifier`.
+when you pass `--classifier`. These dataset settings are available as `hyrax_parsnip.RUBIN_DIA_SETTINGS`:
+
+```python
+for key, value in hyrax_parsnip.RUBIN_DIA_SETTINGS.items():
+    h.set_config(f"data_set.ParsnipHATSDataset.{key}", value)
+```
 
 ## Training (optional)
 
@@ -122,9 +136,10 @@ smaller value, e.g. `train_classifier(..., min_child_weight=10.0)`.
 
 ## Examples
 
-- `examples/demo_workflow.ipynb`: end-to-end walkthrough on a simulated catalog (SN Ia / II-P / Ib/c from
-  sncosmo): HATS catalog → pretrained inference → latent space → classifier → optional fine-tuning.
-  Install the extras with `.venv/bin/pip install -e ".[notebook]"`.
+- `examples/demo_workflow.ipynb`: end-to-end walkthrough on SN Ia / II / Ib/c simulated with lightcurvelynx on the
+  real DP2 visits and written in the DP2 DIA catalog schema: HATS catalog → pretrained inference (with and
+  without redshifts) → latent space → classifier → optional fine-tuning. Needs lightcurvelynx (see Install for
+  NERSC) and the notebook extras (`.venv/bin/pip install -e ".[notebook]"`).
 - `examples/pretrained_inference.py`: HATS → latents → (train or load) classifier → probabilities.
 - `examples/train_then_infer.py`: train or fine-tune, export, then run inference.
 
