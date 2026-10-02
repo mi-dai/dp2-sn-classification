@@ -7,6 +7,8 @@ lightcurvelynx through the DP2 visit-detector table: every CCD visit covering a 
 one forced-photometry point, with noise from that visit. Positions are drawn over the area
 covered by both DP2 visits and the DP2 DIA catalog, with SFD Milky Way extinction. Objects
 without at least ``min_detections`` detections are dropped (a DIA object needs detections).
+With ``--ddf-only``, only visits within ``DDF_RADIUS_DEG`` of a Deep Drilling Field center are
+used, so objects are simulated in the DDFs only.
 
 The output HATS catalog has the DP2 DIA schema, so it reads like real data with
 ``hyrax_parsnip.RUBIN_DIA_SETTINGS``:
@@ -64,6 +66,18 @@ from hyrax_parsnip import RUBIN_DIA_SETTINGS
 DP2_VISIT_DETECTOR_FILE = "/global/cfs/cdirs/lsst/shared/rubin/DP2/HATS/public-files/visit_detector.parquet"
 DP2_DIA_CATALOG = "/global/cfs/cdirs/lsst/shared/rubin/DP2/HATS/dia_object_collection/dia_object_lc"
 
+# LSST Deep Drilling Field centers (rubin_scheduler). The visit-detector table has no
+# field/program column, so DDF visits are selected by distance to these centers.
+DDF_FIELDS = {
+    "COSMOS": (150.1167, 2.2058),
+    "ECDFS": (53.125, -28.100),
+    "EDFS_a": (58.90, -49.315),
+    "EDFS_b": (63.60, -47.60),
+    "ELAIS-S1": (9.45, -44.00),
+    "XMM-LSS": (35.708, -4.750),
+}
+DDF_RADIUS_DEG = 1.75
+
 BANDS = list("ugrizy")
 H0, OMEGA_M = 70.0, 0.315
 
@@ -73,6 +87,13 @@ CLASSES = {
     "SNIa": {"zmax": 0.8},
     "SNII": {"zmax": 0.5, "types": ("SN II", "SN IIn", "SN IIb"), "m_abs": (-16.8, 0.8)},
     "SNIbc": {"zmax": 0.5, "types": ("SN Ib", "SN Ic", "SN Ic-BL"), "m_abs": (-17.5, 0.8)},
+}
+
+# The DDFs are deeper, so detected objects reach higher redshift.
+DDF_CLASSES = {
+    "SNIa": {**CLASSES["SNIa"], "zmax": 1.2},
+    "SNII": {**CLASSES["SNII"], "zmax": 0.9},
+    "SNIbc": {**CLASSES["SNIbc"], "zmax": 0.9},
 }
 
 FLAG_COLUMNS = RUBIN_DIA_SETTINGS["flag_columns"]
@@ -91,12 +112,29 @@ class Survey:
     t_max: float
 
 
-def load_survey(visit_file=DP2_VISIT_DETECTOR_FILE, dia_catalog=DP2_DIA_CATALOG, noise_scale=1.5) -> Survey:
+def in_ddf(ra, dec, radius=DDF_RADIUS_DEG) -> np.ndarray:
+    """Whether each position (deg) is within `radius` deg of a DDF center."""
+    ra, dec = np.radians(np.asarray(ra)), np.radians(np.asarray(dec))
+    mask = np.zeros(ra.shape, dtype=bool)
+    for field_ra, field_dec in DDF_FIELDS.values():
+        field_ra, field_dec = np.radians(field_ra), np.radians(field_dec)
+        cos_sep = np.sin(dec) * np.sin(field_dec) + np.cos(dec) * np.cos(field_dec) * np.cos(ra - field_ra)
+        mask |= cos_sep > np.cos(np.radians(radius))
+    return mask
+
+
+def load_survey(
+    visit_file=DP2_VISIT_DETECTOR_FILE, dia_catalog=DP2_DIA_CATALOG, noise_scale=1.5, ddf_only=False
+) -> Survey:
     """DP2 visits and noise model, and the area covered by both DP2 visits and the DIA catalog.
 
     ``noise_scale`` inflates the Poisson flux errors (DP2 errors are underestimated).
+    ``ddf_only`` keeps only the CCD visits within `DDF_RADIUS_DEG` of a DDF center.
     """
-    obstable = LSSTObsTable.from_ccdvisit_table(pd.read_parquet(visit_file), make_detector_footprint=True)
+    visits = pd.read_parquet(visit_file)
+    if ddf_only:
+        visits = visits[in_ddf(visits["ra"], visits["dec"])]
+    obstable = LSSTObsTable.from_ccdvisit_table(visits, make_detector_footprint=True)
     passbands = PassbandGroup.from_preset("LSST", filters=BANDS)
     noise_model = PoissonFluxNoiseModel(err_scale=noise_scale)
     footprint = obstable.build_moc(max_depth=12).intersection(lsdb.open_catalog(dia_catalog).hc_structure.moc)
@@ -190,7 +228,7 @@ def simulate_class(
     if isinstance(model, RandomMultiObjectModel):
         param_cols.append(f"{label}.selected_object")
 
-    kept, n_simulated = [], 0
+    kept, n_simulated, n_detected = [], 0, 0
     while sum(map(len, kept)) < n:
         lcs = simulate_lightcurves(
             model=model,
@@ -207,9 +245,10 @@ def simulate_class(
         flat = lcs["lightcurve"].nest.to_flat()
         n_det = n_detections(flat["flux"], flat["fluxerr"], flat["is_saturated"].astype(bool), flat.index, detection_snr)
         kept.append(lcs[n_det.reindex(lcs.index, fill_value=0).to_numpy() >= min_detections])
+        n_detected += len(kept[-1])
 
     lcs = pd.concat(kept, ignore_index=True).head(n)
-    print(f"{label}: simulated {n_simulated:,}, kept {len(lcs):,} detected")
+    print(f"{label}: simulated {n_simulated:,}, {n_detected:,} detected, kept {len(lcs):,}")
     return lcs
 
 
@@ -312,15 +351,17 @@ def main():
     parser.add_argument("--noise-scale", type=float, default=1.5, help="Inflate Poisson flux errors by this factor")
     parser.add_argument("--detection-snr", type=float, default=5.0)
     parser.add_argument("--min-detections", type=int, default=2)
+    parser.add_argument("--ddf-only", action="store_true", help="Simulate in the Deep Drilling Fields only")
     parser.add_argument("--num-jobs", type=int, help="Worker processes per batch (default: serial)")
     parser.add_argument("--visit-file", default=DP2_VISIT_DETECTOR_FILE, help="DP2 visit-detector parquet")
     parser.add_argument("--dia-catalog", default=DP2_DIA_CATALOG, help="Real DIA catalog for footprint and schema")
     args = parser.parse_args()
 
-    survey = load_survey(args.visit_file, args.dia_catalog, noise_scale=args.noise_scale)
+    survey = load_survey(args.visit_file, args.dia_catalog, noise_scale=args.noise_scale, ddf_only=args.ddf_only)
     frame = simulate_catalog(
         survey,
         args.n_per_class,
+        classes=DDF_CLASSES if args.ddf_only else CLASSES,
         seed=args.seed,
         batch_size=args.batch_size,
         detection_snr=args.detection_snr,
