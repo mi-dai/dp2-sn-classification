@@ -259,7 +259,7 @@ def plot_accuracy(table, class_names, path):
     axes[0].xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
     axes[0].set(xlabel="light-curve total S/N", ylabel="recall (fraction correct)", ylim=(0, 1.02))
     axes[1].set(xlabel="true redshift")
-    axes[0].legend()
+    axes[0].legend(loc="lower right")
     fig.suptitle("Out-of-sample recall per class (dotted: chance)", fontsize=10)
     fig.tight_layout()
     fig.savefig(path)
