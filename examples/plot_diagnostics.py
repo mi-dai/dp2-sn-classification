@@ -1,11 +1,12 @@
 """Diagnostic plots for ParSNIP run on a simulated DP2 catalog.
 
-    python examples/plot_diagnostics.py CATALOG PREDICTIONS [--output-dir DIR]
+    python examples/plot_diagnostics.py CATALOG PREDICTIONS [--output-dir DIR] [--binary-class SNIa]
 
 CATALOG is a HATS catalog written by ``simulate_dp2.py`` (it has the truth columns
 ``type``, ``redshift`` and ``t0``). PREDICTIONS is the table written by
 ``classify_rubin_dia.py`` for that catalog. Trains a LightGBM classifier on the
-predictions with K-folding and saves, in DIR:
+predictions with K-folding (with ``--binary-class LABEL``, a binary LABEL vs non-LABEL
+classifier) and saves, in DIR:
 
 - ``sample.png``: true redshift and number of detections per class
 - ``lightcurves.png``: typical light curves of each class, with the out-of-sample prediction
@@ -59,10 +60,15 @@ plt.rcParams.update(
 )
 
 
-def load(catalog_path, predictions_path, num_folds, min_child_weight):
+def load(catalog_path, predictions_path, num_folds, min_child_weight, binary_class=None):
     """Truth + ParSNIP features + out-of-sample probabilities, one row per object."""
     frame = lsdb.open_catalog(str(catalog_path), columns=[*TRUTH_COLUMNS, "diaObjectForcedSource"]).compute()
     frame = frame.set_index("diaObjectId", drop=False)
+    if binary_class:
+        types = frame["type"].astype(str)
+        if binary_class not in set(types):
+            raise ValueError(f"--binary-class {binary_class!r} is not one of the types {sorted(set(types))}")
+        frame["type"] = types.where(types == binary_class, f"non-{binary_class}")
 
     predictions = Table.from_pandas(pd.read_parquet(predictions_path))
     ids = np.asarray(predictions["diaObjectId"]).astype(str)
@@ -274,11 +280,14 @@ def main():
     parser.add_argument("--output-dir", default="diagnostics")
     parser.add_argument("--num-folds", type=int, default=5)
     parser.add_argument("--min-child-weight", type=float, default=10.0)
+    parser.add_argument("--binary-class", metavar="LABEL", help="Binary LABEL vs non-LABEL classification (e.g. SNIa)")
     args = parser.parse_args()
 
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    frame, table, class_names = load(args.catalog, args.predictions, args.num_folds, args.min_child_weight)
+    frame, table, class_names = load(
+        args.catalog, args.predictions, args.num_folds, args.min_child_weight, args.binary_class
+    )
 
     plot_sample(table, class_names, out / "sample.png")
     plot_lightcurves(frame, table, class_names, out / "lightcurves.png")
@@ -291,6 +300,13 @@ def main():
 
     accuracy = (table["type"] == table["predicted_type"])[table["predicted_type"].notna()].mean()
     print(f"Out-of-sample accuracy {accuracy:.3f}; wrote plots to {out}")
+    if args.binary_class:
+        t = table[table["predicted_type"].notna()]
+        true, pred = t["type"] == args.binary_class, t["predicted_type"] == args.binary_class
+        print(
+            f"{args.binary_class}: efficiency {(true & pred).sum() / true.sum():.3f}, "
+            f"purity {(true & pred).sum() / max(pred.sum(), 1):.3f}"
+        )
 
 
 if __name__ == "__main__":
