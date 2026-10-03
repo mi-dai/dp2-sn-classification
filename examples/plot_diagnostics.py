@@ -10,6 +10,7 @@ predictions with K-folding and saves, in DIR:
 - ``sample.png``: true redshift and number of detections per class
 - ``lightcurves.png``: typical light curves of each class, with the out-of-sample prediction
 - ``redshift.png``: ParSNIP predicted vs true redshift, and the residual vs true redshift
+  (only for photo-z models, whose predictions include ``predicted_redshift``)
 - ``latent.png``: the ParSNIP latent space (s1, s2, s3) colored by class
 - ``confusion.png``: out-of-sample confusion matrix
 - ``accuracy.png``: out-of-sample accuracy vs light-curve S/N and vs true redshift
@@ -281,7 +282,8 @@ def main():
 
     plot_sample(table, class_names, out / "sample.png")
     plot_lightcurves(frame, table, class_names, out / "lightcurves.png")
-    plot_redshift(table, class_names, out / "redshift.png")
+    if "predicted_redshift" in table:
+        plot_redshift(table, class_names, out / "redshift.png")
     plot_latent(table, class_names, out / "latent.png")
     plot_confusion(table, class_names, out / "confusion.png")
     plot_accuracy(table, class_names, out / "accuracy.png")
