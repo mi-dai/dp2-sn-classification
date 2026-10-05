@@ -1,10 +1,10 @@
 """Diagnostic plots for ParSNIP run on a simulated DP2 catalog.
 
-    python examples/plot_diagnostics.py CATALOG PREDICTIONS [--output-dir DIR] [--binary-class SNIa]
+    python examples/parsnip_plot_diagnostics.py CATALOG PREDICTIONS [--output-dir DIR] [--binary-class SNIa]
 
 CATALOG is a HATS catalog written by ``simulate_dp2.py`` (it has the truth columns
 ``type``, ``redshift`` and ``t0``). PREDICTIONS is the table written by
-``classify_rubin_dia.py`` for that catalog. Trains a LightGBM classifier on the
+``parsnip_classify_rubin_dia.py`` for that catalog. Trains a LightGBM classifier on the
 predictions with K-folding (with ``--binary-class LABEL``, a binary LABEL vs non-LABEL
 classifier) and saves, in DIR:
 
@@ -276,7 +276,7 @@ def plot_accuracy(table, class_names, path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("catalog", help="Simulated HATS catalog (from simulate_dp2.py)")
-    parser.add_argument("predictions", help="Predictions table (from classify_rubin_dia.py)")
+    parser.add_argument("predictions", help="Predictions table (from parsnip_classify_rubin_dia.py)")
     parser.add_argument("--output-dir", default="diagnostics")
     parser.add_argument("--num-folds", type=int, default=5)
     parser.add_argument("--min-child-weight", type=float, default=10.0)

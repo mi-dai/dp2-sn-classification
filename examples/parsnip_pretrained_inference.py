@@ -1,6 +1,6 @@
 """HATS catalog -> ParSNIP latents (pretrained model, no training) -> class probabilities.
 
-    python examples/pretrained_inference.py /path/to/hats_catalog \\
+    python examples/parsnip_pretrained_inference.py /path/to/hats_catalog \\
         [--model plasticc] [--label-column type] [--classifier classifier.pkl]
 
 - With --label-column, a LightGBM classifier is trained on the labels and saved to

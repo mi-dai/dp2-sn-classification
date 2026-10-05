@@ -1,6 +1,6 @@
 """Train (or fine-tune) ParSNIP with Hyrax on a HATS catalog, then run inference.
 
-    python examples/train_then_infer.py /path/to/hats_catalog \\
+    python examples/parsnip_train_then_infer.py /path/to/hats_catalog \\
         [--from-pretrained plasticc] [--epochs 50] [--export model.pt]
 
 Without --from-pretrained, a new ParSNIP model is trained from scratch using the

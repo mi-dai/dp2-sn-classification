@@ -1,6 +1,6 @@
 """ParSNIP features (and optionally classes) for a Rubin DIA HATS catalog.
 
-    python examples/classify_rubin_dia.py \\
+    python examples/parsnip_classify_rubin_dia.py \\
         [/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats] \\
         [--output parsnip_predictions.parquet] [--classifier classifier.pkl] \\
         [--redshift-column redshift] [--mwebv-column mwebv]

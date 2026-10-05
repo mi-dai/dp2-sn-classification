@@ -81,7 +81,7 @@ redshifts); the photo-z model ignores them.
 
 ### Rubin DIA catalogs
 
-`examples/classify_rubin_dia.py` runs `plasticc_photoz` on a Rubin HATS catalog with nested
+`examples/parsnip_classify_rubin_dia.py` runs `plasticc_photoz` on a Rubin HATS catalog with nested
 `diaObjectForcedSource` photometry: `psfDiffFlux` in nJy (rescaled with `flux_scale`) with flagged
 points dropped (`flag_columns`). It writes one row per `diaObjectId`, and adds class probabilities
 when you pass `--classifier`. These dataset settings are available as `hyrax_parsnip.RUBIN_DIA_SETTINGS`:
@@ -136,16 +136,16 @@ smaller value, e.g. `train_classifier(..., min_child_weight=10.0)`.
 
 ## Examples
 
-- `examples/demo_workflow.ipynb`: end-to-end walkthrough on SN Ia / II / Ib/c simulated with lightcurvelynx on the
+- `examples/parsnip_demo_workflow.ipynb`: end-to-end walkthrough on SN Ia / II / Ib/c simulated with lightcurvelynx on the
   real DP2 visits and written in the DP2 DIA catalog schema: HATS catalog → pretrained inference (with and
   without redshifts) → latent space → classifier → optional fine-tuning. Needs lightcurvelynx (see Install for
   NERSC) and the notebook extras (`.venv/bin/pip install -e ".[notebook]"`).
 - `examples/simulate_dp2.py`: the demo's simulations as a script, e.g.
   `python examples/simulate_dp2.py data/dp2_sim_sne --n-per-class 5000` for a larger training set.
-- `examples/plot_diagnostics.py`: diagnostic plots for a simulated catalog run through `classify_rubin_dia.py`
+- `examples/parsnip_plot_diagnostics.py`: diagnostic plots for a simulated catalog run through `parsnip_classify_rubin_dia.py`
   (K-fold confusion matrix, recall vs S/N and redshift, predicted vs true redshift, latent space, light curves).
-- `examples/pretrained_inference.py`: HATS → latents → (train or load) classifier → probabilities.
-- `examples/train_then_infer.py`: train or fine-tune, export, then run inference.
+- `examples/parsnip_pretrained_inference.py`: HATS → latents → (train or load) classifier → probabilities.
+- `examples/parsnip_train_then_infer.py`: train or fine-tune, export, then run inference.
 
 ## Notes
 
