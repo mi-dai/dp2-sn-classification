@@ -83,7 +83,7 @@ redshifts); the photo-z model ignores them.
 
 ### Rubin DIA catalogs
 
-`examples/parsnip_classify_rubin_dia.py` runs `plasticc_photoz` on a Rubin HATS catalog with nested
+`examples/classify_rubin_dia.py --method parsnip` runs `plasticc_photoz` on a Rubin HATS catalog with nested
 `diaObjectForcedSource` photometry: `psfDiffFlux` in nJy (rescaled with `flux_scale`) with flagged
 points dropped (`flag_columns`). It writes one row per `diaObjectId`, and adds class probabilities
 when you pass `--classifier`. These dataset settings are available as `hyrax_parsnip.RUBIN_DIA_SETTINGS`:
@@ -195,14 +195,23 @@ on them.
   NERSC) and the notebook extras (`.venv/bin/pip install -e ".[notebook]"`).
 - `examples/simulate_dp2.py`: the demo's simulations as a script, e.g.
   `python examples/simulate_dp2.py data/dp2_sim_sne --n-per-class 5000` for a larger training set.
-- `examples/parsnip_plot_diagnostics.py`: diagnostic plots for a simulated catalog run through `parsnip_classify_rubin_dia.py`
-  (K-fold confusion matrix, recall vs S/N and redshift, predicted vs true redshift, latent space, light curves).
-- `examples/parsnip_pretrained_inference.py`: HATS → latents → (train or load) classifier → probabilities.
-- `examples/parsnip_train_then_infer.py`: train or fine-tune, export, then run inference.
-- `examples/snn_classify_rubin_dia.py`: classify a Rubin DIA catalog with a pretrained SuperNNova model
-  (`--model`, `--redshift-column` for the models with redshift, `--fink-exact`).
-- `examples/snn_evaluate.py`: score SuperNNova predictions on a simulated catalog against the truth
-  (P(target) per true type, predicted class per type, recall vs redshift and detections, ROC for `elasticc_ia`).
+- `examples/classify_rubin_dia.py --method {parsnip,snn}`: classify a Rubin DIA catalog with ParSNIP or
+  SuperNNova (`--model` for the pretrained model, `--redshift-column` for models with redshift input; parsnip:
+  `--classifier` for class probabilities; snn: `--fink-exact` and input options). Both write the same table:
+  `diaObjectId`, `method`, `model`, `redshift_input`, `p_<class>`, `predicted_class` (plus ParSNIP's features).
+- `examples/evaluate.py`: score predictions from either method on a simulated catalog against the truth
+  (confusion matrix or predicted class per true type, recall vs S/N and redshift, P(target) and ROC, light
+  curves; predicted vs true redshift and latent space for ParSNIP). The simulation is validation-only:
+  probabilities are used as given; `--kfold-lightgbm` trains ParSNIP's classifier on the catalog instead, as a
+  quick check. It warns when the model was given the redshift (`--redshift-column`).
+- `examples/parsnip_train_then_infer.py`: train or fine-tune ParSNIP, export, then run inference.
+
+```bash
+python examples/classify_rubin_dia.py data/dp2_sim_sne --method snn --output snn.parquet
+python examples/evaluate.py data/dp2_sim_sne snn.parquet --output-dir eval_snn
+python examples/classify_rubin_dia.py data/dp2_sim_sne --method parsnip --classifier classifier.pkl --output parsnip.parquet
+python examples/evaluate.py data/dp2_sim_sne parsnip.parquet --output-dir eval_parsnip
+```
 
 ## Notes
 
