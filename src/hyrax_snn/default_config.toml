@@ -1,0 +1,35 @@
+# Default configuration for hyrax-snn. Hyrax merges this file automatically whenever
+# the runtime config references a `hyrax_snn.*` class. The dataset is
+# hyrax_parsnip's ParsnipHATSDataset; see hyrax_parsnip/default_config.toml.
+
+[model.HyraxSNN]
+# Pretrained SuperNNova model: a built-in Fink ELAsTiCC model name or a SuperNNova
+# model directory (cli_args.json, data_norm.json, model.pt).
+#   Without redshift: "elasticc_ia" (SNIa vs other), "SN_vs_other".
+#   With redshift:    "elasticc_broad" (SN, Fast, Long, Periodic, NonPeriodic),
+#                     "Fast_vs_other", "Long_vs_other", "Periodic_vs_other", "NonPeriodic_vs_other".
+pretrained = "elasticc_ia"
+
+# Where built-in models are downloaded; false = ~/.cache/hyrax_snn/<fink-science commit>.
+cache_dir = false
+
+# PyTorch device ("cpu", "cuda", ...), or "hyrax" to follow Hyrax's device choice.
+device = "cpu"
+
+# Only consider observations within (before, after) days of the max-S/N point, like the
+# photo_window the Fink models were trained with. false = use all observations
+# (what Fink's on-the-fly classification does).
+time_window = [-30, 100]
+
+# Keep only observations with flux / fluxerr above this (e.g. 5), like the alert
+# detections (diaSource + prvDiaSources) Fink feeds its models. false = keep all
+# (e.g. the full forced photometry).
+detection_snr = false
+
+# HOSTGAL_SPECZ_ERR given to models with redshift input (same for every object).
+redshift_error = 0.0
+
+# SuperNNova stores the flux log-normalization minimum clipped to -2000 although its
+# mean/std used the true minimum; the models were trained with the clipped value
+# (training-consistent: false). true restores min = -exp(mean) instead.
+fix_clipped_norm_min = false

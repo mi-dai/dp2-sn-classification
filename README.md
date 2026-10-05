@@ -11,6 +11,8 @@ Run [ParSNIP](https://parsnip.readthedocs.io) transient models through
   `h.train()`, and export the result back to ParSNIP's native format.
 - **Classification.** Train ParSNIP's LightGBM classifier on labeled
   predictions, save it, and reuse it on new inference results.
+- **SuperNNova (`hyrax_snn`).** Run Fink's pretrained SuperNNova classifiers on the same
+  catalogs, with or without redshifts. Inference only; see [SuperNNova](#supernnova-hyrax_snn).
 
 ## Install
 
@@ -134,6 +136,57 @@ ParSNIP's default LightGBM `min_child_weight=1000` suits PLAsTiCC-sized training
 hundred labeled objects it prevents every split, and all probabilities come out equal. In that case pass a
 smaller value, e.g. `train_classifier(..., min_child_weight=10.0)`.
 
+## SuperNNova (`hyrax_snn`)
+
+`hyrax_snn` runs pretrained [SuperNNova](https://supernnova.readthedocs.io) classifiers
+through Hyrax, reading catalogs with the same dataset and settings as ParSNIP. There is no
+training: the models are complete classifiers trained by the [Fink](https://fink-broker.org)
+broker on ELAsTiCC (Fraga et al. 2024, [arXiv:2404.08798](https://arxiv.org/abs/2404.08798)),
+published in [fink-science](https://github.com/astrolabsoftware/fink-science) (Apache-2.0).
+They are downloaded from a pinned commit on first use (`~/.cache/hyrax_snn/`); run once on a
+machine with internet access (e.g. a NERSC login node) before using compute nodes.
+
+| model | redshift | classes |
+|---|---|---|
+| `elasticc_ia` | no | SNIa, other |
+| `SN_vs_other` | no | SN, other |
+| `elasticc_broad` | yes (+ MWEBV) | SN, Fast, Long, Periodic, NonPeriodic |
+| `Fast_vs_other`, `Long_vs_other`, `Periodic_vs_other`, `NonPeriodic_vs_other` | yes (+ MWEBV) | X, other |
+
+```python
+from hyrax import Hyrax
+import hyrax_snn
+
+h = Hyrax()
+settings = dict(hyrax_snn.RUBIN_DIA_SETTINGS)          # Rubin DIA columns, fluxes kept in nJy
+# settings["redshift_column"] = "redshift"             # for models with redshift
+hyrax_snn.configure(h, catalog, pretrained="elasticc_ia", dataset_settings=settings)
+predictions = hyrax_snn.load_predictions(h.infer())    # object_id, one probability per class, predicted_class
+```
+
+The preprocessing is a numpy port of SuperNNova's on-the-fly classification (SuperNNova
+pins pandas < 3, so it is not a dependency) and its `VanillaRNN` is included (MIT). Tests
+check that probabilities match SuperNNova's `classify_lcs` to 1e-4.
+
+How the input is prepared matters, and is configurable under `[model.HyraxSNN]`:
+- **Flux units.** The models behave as if trained on nJy (the alert stream). In our tests on
+  simulated SNe, `elasticc_ia` separated SN Ia much better with nJy input than with the
+  zp-27.5 fluxes Fink's own processor sends, so `RUBIN_DIA_SETTINGS` keeps nJy. Models with
+  `cosmo_quantile` normalization (the ones with redshift) don't depend on units.
+- **`time_window`** (default `[-30, 100]`): use observations within this many days of the
+  max-S/N point, like the window the models were trained with.
+- **`detection_snr`** (default off): keep only points above this S/N, like the alert
+  detections Fink feeds its models, instead of the full forced photometry.
+- **`fix_clipped_norm_min`** (default off): SuperNNova stores the flux normalization minimum
+  clipped to −2000 while its mean/std used the true minimum; the models were trained with
+  the clipped value, so this is off by default.
+- `hyrax_snn.FINK_EXACT` (+ `flux_scale = FINK_EXACT_FLUX_SCALE`) approximates Fink's own
+  processing, for comparison.
+
+On our small toy simulation the models performed poorly whichever way the input was
+prepared (e.g. `elasticc_ia` AUC 0.3–0.75); validate on the DP2 simulation before relying
+on them.
+
 ## Examples
 
 - `examples/parsnip_demo_workflow.ipynb`: end-to-end walkthrough on SN Ia / II / Ib/c simulated with lightcurvelynx on the
@@ -146,6 +199,10 @@ smaller value, e.g. `train_classifier(..., min_child_weight=10.0)`.
   (K-fold confusion matrix, recall vs S/N and redshift, predicted vs true redshift, latent space, light curves).
 - `examples/parsnip_pretrained_inference.py`: HATS → latents → (train or load) classifier → probabilities.
 - `examples/parsnip_train_then_infer.py`: train or fine-tune, export, then run inference.
+- `examples/snn_classify_rubin_dia.py`: classify a Rubin DIA catalog with a pretrained SuperNNova model
+  (`--model`, `--redshift-column` for the models with redshift, `--fink-exact`).
+- `examples/snn_evaluate.py`: score SuperNNova predictions on a simulated catalog against the truth
+  (P(target) per true type, predicted class per type, recall vs redshift and detections, ROC for `elasticc_ia`).
 
 ## Notes
 
@@ -170,3 +227,6 @@ The tests build a small synthetic nested HATS catalog and cover:
 - pretrained inference, checked against native `parsnip.predict`
 - training from scratch, fine-tuning, and export
 - the classifier, including reloading it in a fresh process
+- `hyrax_snn` with a synthetic model (features, batch-order invariance, with/without redshift)
+- `hyrax_snn` against SuperNNova itself with the Fink models (`tests/test_snn_reference.py`;
+  skipped unless `supernnova` is installed: `.venv/bin/pip install --no-deps supernnova==3.0.51 natsort seaborn`)
