@@ -1,4 +1,4 @@
-# Default configuration for hyrax-parsnip. Hyrax merges this file automatically
+# Default configuration for hyrax_parsnip. Hyrax merges this file automatically
 # whenever the runtime config references a `hyrax_parsnip.*` class.
 
 [model.HyraxParsnip]

@@ -2,7 +2,7 @@
 
 Photometric classification of Rubin DP2 transients with pretrained models run through
 [Hyrax](https://hyrax.readthedocs.io), on light curves stored in [HATS](https://hats.readthedocs.io)
-catalogs. Two classifiers are available, each as its own package in the `hyrax-parsnip` distribution:
+catalogs. Two classifiers are available, each as its own package in the `dp2-sn-classification` distribution:
 
 | | ParSNIP (`hyrax_parsnip`) | SuperNNova (`hyrax_snn`) |
 |---|---|---|
@@ -61,7 +61,7 @@ At NERSC, build the venv on top of `desc-td-env`, which provides lightcurvelynx 
 /global/common/software/lsst/install/td_env/2026-09-03-32-23/py/envs/td_env/bin/python \
     -m venv --system-site-packages .venv
 .venv/bin/pip install -e ".[notebook,dev]"
-.venv/bin/python -m ipykernel install --user --name hyrax-parsnip-td --display-name "hyrax-parsnip (td_env)"
+.venv/bin/python -m ipykernel install --user --name dp2-sn-classification-td --display-name "dp2-sn-classification (td_env)"
 ```
 
 Extras: `notebook` (Jupyter), `sim` (lightcurvelynx, sncosmo, dustmaps, mocpy; included in `desc-td-env`).
