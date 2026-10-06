@@ -19,8 +19,8 @@ ParSNIP's classifier has no redshift feature, but with ``plasticc`` the redshift
 through ``luminosity`` and the rest-frame latents.
 
 Scoring depends on the classes:
-- matched (every class is a true type, e.g. a classifier trained on SNIa/SNII/SNIbc):
-  confusion matrix, accuracy, recall per type;
+- matched (the classes are the true types, possibly plus extra ones, e.g. a classifier
+  trained on PLAsTiCC with SNIa/SNII/SNIbc/other): confusion matrix, accuracy, recall per type;
 - target (classes that aren't true types, e.g. SuperNNova's SNIa/other or broad classes):
   the first class is the target, scored as SNIa → type SNIa, SN → any SN, and any other
   class (Fast, Long, ...) has no members in the simulation.
@@ -425,7 +425,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     frame, table, classes = load(args.catalog, args.predictions, args)
     types = sorted(table["type"].unique())
-    matched = set(classes) <= set(types)
+    # Matched: the classes are the true types, possibly plus extra ones (e.g. a classifier's "other").
+    matched = set(types) <= set(classes) or set(classes) <= set(types)
     classified = (table["predicted_class"] != "").to_numpy()
     method = table["method"].iloc[0] if "method" in table else "parsnip"
     model = table["model"].iloc[0] if "model" in table else "?"

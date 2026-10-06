@@ -136,6 +136,36 @@ ParSNIP's default LightGBM `min_child_weight=1000` suits PLAsTiCC-sized training
 hundred labeled objects it prevents every split, and all probabilities come out equal. In that case pass a
 smaller value, e.g. `train_classifier(..., min_child_weight=10.0)`.
 
+### Training on PLAsTiCC, validating on the DP2 simulation
+
+The DP2 simulation is kept for validation, so the classifier is trained on
+[PLAsTiCC](https://zenodo.org/records/2539456) (Kessler et al. 2019, CC-BY-4.0), the simulation
+ParSNIP's `plasticc` models were trained on:
+
+```bash
+# 1. Labeled HATS catalog: official training set (7,848) + all test-set DDF objects (32,926), ~330 MB download
+python examples/plasticc_to_hats.py data/plasticc_hats --ddf
+# 2. ParSNIP features + LightGBM classifier (SNIa, SNII, SNIbc, other); writes .pkl and .json
+python examples/parsnip_train_classifier.py data/plasticc_hats --output plasticc_classifier.pkl
+# 3. Classify DP2 (the model is taken from plasticc_classifier.json)
+python examples/classify_rubin_dia.py data/dp2_sim_sne --method parsnip --classifier plasticc_classifier.pkl
+# 4. Score against the truth (no training on the simulation)
+python examples/evaluate.py data/dp2_sim_sne parsnip_predictions.parquet --output-dir eval_parsnip
+```
+
+- By default the features come from `plasticc_photoz` with the same weak photo-z prior used for DP2, so no
+  external redshift is involved. `--redshift-column redshift` in step 2 trains the `plasticc` (true-redshift)
+  variant; step 3 then needs `--redshift-column` too.
+- The classifier's `.json` records the ParSNIP model and whether it was given the redshift.
+  `classify_rubin_dia.py` refuses a different `--model` or redshift setting, since the features would differ.
+- Fluxes are used as distributed: ParSNIP was trained on these values, and DP2's nJy fluxes are converted to the
+  same scale (zp 27.5).
+- On the training set alone, K-fold accuracy is 0.85 (SNIa recall 0.91). Applied without retraining to an
+  independent toy simulation (sncosmo SN Ia/II-P/Ib/c), accuracy was 0.71, with SN Ib/c the weakest (often
+  called SNIa).
+- Multimodal Universe's PLAsTiCC on Hugging Face (`hf://MultimodalUniverse/plasticc`, readable with Hyrax's
+  `MultimodalUniverseDataset`) has only the 7,848 training objects and no Y-band data, so the Zenodo files are used.
+
 ## SuperNNova (`hyrax_snn`)
 
 `hyrax_snn` runs pretrained [SuperNNova](https://supernnova.readthedocs.io) classifiers
@@ -205,6 +235,10 @@ on them.
   probabilities are used as given; `--kfold-lightgbm` trains ParSNIP's classifier on the catalog instead, as a
   quick check. It warns when the model was given the redshift (`--redshift-column`).
 - `examples/parsnip_train_then_infer.py`: train or fine-tune ParSNIP, export, then run inference.
+- `examples/plasticc_to_hats.py`: download PLAsTiCC from Zenodo and write a labeled HATS catalog (`--ddf` adds the
+  test-set DDF objects).
+- `examples/parsnip_train_classifier.py`: train ParSNIP's LightGBM classifier on a labeled catalog; writes the
+  classifier, a `.json` that `classify_rubin_dia.py` checks, and K-fold results.
 
 ```bash
 python examples/classify_rubin_dia.py data/dp2_sim_sne --method snn --output snn.parquet

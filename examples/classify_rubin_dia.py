@@ -13,7 +13,9 @@ observations, and runs a pretrained model:
   its light curve; with ``--redshift-column`` (e.g. the true redshift of simulations) the
   default is ``plasticc``, which takes the redshift as input. ParSNIP ships no classifier:
   class probabilities need ``--classifier``, a saved ``parsnip.Classifier`` trained on
-  labeled light curves run through the same model (``hyrax_parsnip.train_classifier``).
+  labeled light curves run through the same model (``parsnip_train_classifier.py``). Its
+  ``.json`` sets the default ``--model`` and is checked: the model and whether it takes the
+  redshift must match how the classifier was trained.
 - ``--method snn``: class probabilities from a pretrained SuperNNova model (Fink ELAsTiCC),
   fluxes kept in nJy. Default ``elasticc_ia`` (SNIa vs other, no redshift); with
   ``--redshift-column`` the default is ``elasticc_broad`` (SN, Fast, Long, Periodic,
@@ -27,6 +29,8 @@ probabilities and ``predicted_class`` ("" if not classified); for ParSNIP also i
 """
 
 import argparse
+import json
+from pathlib import Path
 
 import numpy as np
 from hyrax import Hyrax
@@ -73,6 +77,10 @@ def parse_args():
     if used:
         parser.error(f"{', '.join(used)} can't be used with --method {args.method}")
 
+    args.classifier_info = None
+    if args.classifier:
+        args.classifier_info = check_classifier(parser, args)
+
     if args.model is None:
         if args.method == "parsnip":
             args.model = "plasticc" if args.redshift_column else "plasticc_photoz"
@@ -84,6 +92,26 @@ def parse_args():
         parser.error(f"--model {args.model!r} is not a SuperNNova model ({', '.join(sorted(hyrax_snn.PRETRAINED_MODELS))})")
     args.output = args.output or f"{args.method}_predictions.parquet"
     return args
+
+
+def check_classifier(parser, args) -> dict | None:
+    """Read the .json written next to a classifier by parsnip_train_classifier.py and make sure
+    the features will be made the same way (ParSNIP model and redshift input)."""
+    info_path = Path(args.classifier).with_suffix(".json")
+    if not info_path.exists():
+        print(f"Warning: no {info_path.name} next to the classifier, so it can't be checked that it was trained "
+              "on features from the same ParSNIP model and redshift input.")
+        return None
+    info = json.loads(info_path.read_text())
+    if args.model is None:
+        args.model = info["model"]
+    elif args.model != info["model"]:
+        parser.error(f"--model {args.model} differs from the classifier's model {info['model']} ({info_path.name})")
+    if info["redshift_input"] and not args.redshift_column:
+        parser.error(f"The classifier was trained with {info['model']} given the redshift: pass --redshift-column")
+    if not info["redshift_input"] and args.redshift_column:
+        parser.error(f"The classifier was trained without a redshift input ({info['model']}): drop --redshift-column")
+    return info
 
 
 def new_hyrax(args):
@@ -133,6 +161,11 @@ def run_parsnip(args):
         print(f"predicted redshift: median {np.median(redshift):.3f}, 5-95% {np.percentile(redshift, [5, 95])}")
 
     if args.classifier:
+        info = args.classifier_info
+        prior = h.config["model"]["HyraxParsnip"]
+        if info and info.get("photoz_prior") and info["photoz_prior"] != [float(prior["photoz"]), float(prior["photoz_error"])]:
+            print(f"Warning: the classifier was trained with photo-z prior {info['photoz_prior']}, "
+                  f"now {[prior['photoz'], prior['photoz_error']]}.")
         probabilities = hyrax_parsnip.classify(hyrax_parsnip.load_classifier(args.classifier), predictions)
         class_names = probabilities.colnames[1:]
         for name in class_names:
@@ -183,6 +216,8 @@ def main():
     predictions.add_column(np.full(len(predictions), args.model), name="model", index=2)
     # Whether the model was given each object's redshift (e.g. the true redshift of simulations).
     predictions.add_column(np.full(len(predictions), redshift_input), name="redshift_input", index=3)
+    if args.method == "parsnip":
+        predictions["classifier"] = Path(args.classifier).name if args.classifier else ""
     if redshift_input:
         print(f"Note: {args.model} takes the redshift from '{args.redshift_column}' as input.")
 
