@@ -219,12 +219,14 @@ on them.
 
 ## Examples
 
-- `examples/parsnip_demo_workflow.ipynb`: end-to-end walkthrough on SN Ia / II / Ib/c simulated with lightcurvelynx on the
-  real DP2 visits and written in the DP2 DIA catalog schema: HATS catalog → pretrained inference (with and
-  without redshifts) → latent space → classifier → optional fine-tuning. Needs lightcurvelynx (see Install for
-  NERSC) and the notebook extras (`.venv/bin/pip install -e ".[notebook]"`).
+- `examples/demo_workflow.ipynb`: both models on SN Ia / II / Ib/c simulated with lightcurvelynx on the real DP2
+  visits, in the DP2 DIA catalog schema, used for validation only: ParSNIP without redshifts (predicted redshifts,
+  latent space) with the PLAsTiCC classifier, SuperNNova without and with redshift, and SN Ia vs rest side by side.
+  It loads `data/dp2_sim_sne` if it exists and simulates otherwise (needs lightcurvelynx; see Install for NERSC);
+  `DEMO_CATALOG` / `DEMO_CLASSIFIER` override the paths. Needs the notebook extras
+  (`.venv/bin/pip install -e ".[notebook]"`).
 - `examples/simulate_dp2.py`: the demo's simulations as a script, e.g.
-  `python examples/simulate_dp2.py data/dp2_sim_sne --n-per-class 5000` for a larger training set.
+  `python examples/simulate_dp2.py data/dp2_sim_sne --n-per-class 5000` for a larger validation set.
 - `examples/classify_rubin_dia.py --method {parsnip,snn}`: classify a Rubin DIA catalog with ParSNIP or
   SuperNNova (`--model` for the pretrained model, `--redshift-column` for models with redshift input; parsnip:
   `--classifier` for class probabilities; snn: `--fink-exact` and input options). Both write the same table:

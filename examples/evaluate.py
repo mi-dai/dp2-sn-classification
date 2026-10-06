@@ -45,8 +45,6 @@ from pathlib import Path
 import lsdb
 import matplotlib
 import matplotlib.ticker
-
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -407,6 +405,8 @@ def plot_latent(table, types, path):
 
 
 def main():
+    # Figures are only written to files. Set here, not at import, so notebooks can use the plot helpers.
+    matplotlib.use("Agg")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("catalog", help="Simulated HATS catalog (from simulate_dp2.py)")
     parser.add_argument("predictions", help="Predictions table (from classify_rubin_dia.py)")

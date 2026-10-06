@@ -23,7 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest"]
 notebook = ["jupyter", "ipykernel", "matplotlib"]
-# Simulations in examples/parsnip_demo_workflow.ipynb (all in desc-td-env at NERSC).
+# Simulations in examples/demo_workflow.ipynb and simulate_dp2.py (all in desc-td-env at NERSC).
 sim = ["lightcurvelynx", "sncosmo", "dustmaps", "mocpy"]
 
 [tool.setuptools.packages.find]
