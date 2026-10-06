@@ -7,3 +7,7 @@ data/
 *.pt
 *.pth
 *.pkl
+nersc/logs/
+# Classifier and prediction outputs written to the repo root by the examples and nersc/ jobs
+/plasticc_classifier*
+/*.parquet

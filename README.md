@@ -55,7 +55,10 @@ python -m venv .venv
 
 On macOS, LightGBM (required by ParSNIP) needs the OpenMP runtime: `brew install libomp`.
 
-At NERSC, build the venv on top of `desc-td-env`, which provides lightcurvelynx for the simulations:
+At NERSC, run `bash nersc/setup_env.sh` on a login node (safe to rerun after `git pull`). It builds the venv on
+top of `desc-td-env`, which provides lightcurvelynx for the simulations, installs the package, registers the
+Jupyter kernel `dp2-sn-classification (td_env)`, and pre-downloads the models and data that compute nodes may
+not reach (`nersc/prefetch.py`). By hand, the core steps are:
 
 ```bash
 /global/common/software/lsst/install/td_env/2026-09-03-32-23/py/envs/td_env/bin/python \
@@ -63,6 +66,10 @@ At NERSC, build the venv on top of `desc-td-env`, which provides lightcurvelynx 
 .venv/bin/pip install -e ".[notebook,dev]"
 .venv/bin/python -m ipykernel install --user --name dp2-sn-classification-td --display-name "dp2-sn-classification (td_env)"
 ```
+
+Slurm jobs for the long steps are in `nersc/` (`simulate_dp2`, `train_parsnip_classifier`, `validate`,
+`classify_edp2`); submit them from the repo root with your account and QOS:
+`sbatch -A <account> -q <qos> nersc/validate.sbatch`. `CLAUDE.md` describes this setup for Claude Code.
 
 Extras: `notebook` (Jupyter), `sim` (lightcurvelynx, sncosmo, dustmaps, mocpy; included in `desc-td-env`).
 SuperNNova's pretrained models are downloaded on first use (see below); SuperNNova itself is not a
