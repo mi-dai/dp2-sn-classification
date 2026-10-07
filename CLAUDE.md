@@ -18,7 +18,7 @@ Supernova classification of Rubin DP2 transients with ParSNIP (`src/hyrax_parsni
 - `nersc/prefetch.py` downloads what compute nodes may not reach: SuperNNova's pretrained models
   (`~/.cache/hyrax_snn`), the PLAsTiCC files (`data/plasticc_raw`, ~330 MB), and the simulation's passbands and
   templates; it checks the SFD dust map. Each step reports and continues on failure.
-- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/pytest -q` (32 tests).
+- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/pytest -q` (34 tests).
 - `desc-td-env` path is set in `nersc/setup_env.sh` (`TD_PYTHON`, overridable).
 
 ## Running jobs

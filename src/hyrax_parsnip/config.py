@@ -6,7 +6,7 @@ MODEL_NAME = "hyrax_parsnip.model.HyraxParsnip"
 DATASET_CLASS = "hyrax_parsnip.dataset.ParsnipHATSDataset"
 
 # Dataset fields the model consumes; see HyraxParsnip.prepare_inputs.
-MODEL_FIELDS = ["lightcurve", "redshift", "mwebv"]
+MODEL_FIELDS = ["lightcurve", "redshift", "mwebv", "photoz"]
 
 # Rubin fluxes are in nJy (AB zeropoint 31.4); the PLAsTiCC models use zeropoint 27.5.
 NJY_TO_ZP27_5 = 10 ** (-0.4 * (31.4 - 27.5))

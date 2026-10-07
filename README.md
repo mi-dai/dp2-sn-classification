@@ -97,7 +97,7 @@ A nested HATS catalog with one row per object, e.g. as produced by LSDB / nested
 
 Both classifiers read it with `hyrax_parsnip.dataset.ParsnipHATSDataset`. All names are configurable under
 `[data_set.ParsnipHATSDataset]`, and so are `mwebv_column`, `label_column`, `flux_scale` (multiplies flux and
-error) and `flag_columns` (drops flagged points). For training, `label_scheme` (`ia`, `dp2` or `all`) maps the
+error), `flag_columns` (drops flagged points) and `photoz_column` (per-object photo-z prior, see below). For training, `label_scheme` (`ia`, `dp2` or `all`) maps the
 `label_column` types to classes, and the `label_index` field gives each object's class index. `band_map` maps catalog bands to the bands a model knows;
 see [`default_config.toml`](src/hyrax_parsnip/default_config.toml).
 
@@ -162,6 +162,16 @@ The model was trained with a host-galaxy photo-z as an encoder input. Every obje
 `model.HyraxParsnip.photoz` / `photoz_error` (default 0.5 ± 1.0), a weak prior. On simulated SN Ia/II-P/Ib/c
 at z = 0.03–0.2, this gave Δz/(1+z) = +0.075 ± 0.068 (NMAD). Hyrax logs a warning about NaN inputs (the
 missing redshifts); the photo-z model ignores them.
+
+To test the photo-z estimate with an informative prior, set the dataset's `photoz_column` (e.g. the true
+redshift of a simulation): objects with a value get it as host photo-z, with error
+`model.HyraxParsnip.photoz_fractional_error` × (1+z) (default 0.05); the others keep the constant prior.
+From the command line: `classify_rubin_dia.py CATALOG --method parsnip --photoz-column redshift
+[--photoz-error 0.05]`; the output is then marked `redshift_input`, since the prior carries the redshift.
+On the same toy simulation (300 objects), the prior centred on the true z gave Δz/(1+z) bias / NMAD of
++0.005 / 0.011 (σ = 0.01(1+z)), +0.017 / 0.017 (0.05) and +0.036 / 0.028 (0.2), against +0.075 / 0.068 with
+the constant prior. A classifier trained on constant-prior features (`parsnip_train_classifier.py`) isn't
+matched to these features (`classify_rubin_dia.py` warns).
 
 ### Classification
 

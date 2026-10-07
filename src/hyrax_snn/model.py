@@ -78,7 +78,7 @@ class HyraxSNN(nn.Module):
         data = data_dict["data"]
         n_objects = len(inputs[1])
         labels = np.asarray(data["label_index"], dtype=np.int64) if "label_index" in data else np.full(n_objects, -1)
-        return (*inputs, labels)
+        return (*inputs[:5], labels)  # without ParSNIP's photoz
 
     def __init__(self, config, data_sample=None):
         super().__init__()

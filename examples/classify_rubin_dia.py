@@ -3,7 +3,7 @@
     python examples/classify_rubin_dia.py --method {parsnip,snn} \\
         [/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats] \\
         [--model NAME] [--output PREDICTIONS.parquet] \\
-        [--redshift-column redshift] [--mwebv-column mwebv]
+        [--redshift-column redshift] [--mwebv-column mwebv] [--photoz-column redshift]
 
 Reads forced photometry on difference images (``diaObjectForcedSource``), drops flagged
 observations, and runs a pretrained model:
@@ -15,7 +15,10 @@ observations, and runs a pretrained model:
   class probabilities need ``--classifier``, a saved ``parsnip.Classifier`` trained on
   labeled light curves run through the same model (``parsnip_train_classifier.py``). Its
   ``.json`` sets the default ``--model`` and is checked: the model and whether it takes the
-  redshift must match how the classifier was trained.
+  redshift must match how the classifier was trained. To test the photo-z estimate on a
+  simulation, ``--photoz-column redshift [--photoz-error 0.05]`` gives the photo-z model each
+  object's true redshift as host photo-z prior, with error 0.05 (1+z), instead of the
+  constant weak prior (the output is then marked ``redshift_input``).
 - ``--method snn``: class probabilities from a SuperNNova model: a pretrained Fink ELAsTiCC
   model (fluxes kept in nJy) or a model directory trained with ``snn_train.py`` (fluxes
   rescaled to its training zeropoint). Default ``elasticc_ia`` (SNIa vs other, no redshift); with
@@ -42,7 +45,7 @@ import hyrax_snn
 DEFAULT_CATALOG = "/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats"
 RESULTS = Path(__file__).resolve().parent / "results"  # default output location (examples/results/)
 PARSNIP_MODELS = ["plasticc", "plasticc_photoz", "ps1"]
-PARSNIP_OPTIONS = ["classifier"]
+PARSNIP_OPTIONS = ["classifier", "photoz_column", "photoz_error"]
 SNN_OPTIONS = ["fink_exact", "detection_snr", "no_time_window", "fix_clipped_min"]
 
 
@@ -66,6 +69,12 @@ def parse_args():
 
     parsnip_group = parser.add_argument_group("parsnip only")
     parsnip_group.add_argument("--classifier", help="Saved parsnip.Classifier to apply (see train_classifier)")
+    parsnip_group.add_argument(
+        "--photoz-column", help="Per-object host photo-z prior for photo-z models (e.g. the true redshift)"
+    )
+    parsnip_group.add_argument(
+        "--photoz-error", type=float, help="Fractional error of --photoz-column: sigma = F (1+z) (default 0.05)"
+    )
 
     snn_group = parser.add_argument_group("snn only")
     snn_group.add_argument("--fink-exact", action="store_true", help="Approximate Fink's own input processing")
@@ -101,6 +110,10 @@ def parse_args():
             f"--model {args.model!r} is not a SuperNNova model ({', '.join(sorted(hyrax_snn.PRETRAINED_MODELS))}, "
             "or a model directory with cli_args.json)"
         )
+    if args.photoz_error is not None and not args.photoz_column:
+        parser.error("--photoz-error needs --photoz-column")
+    if args.photoz_column and (args.redshift_column or args.model in ("plasticc", "ps1")):
+        parser.error(f"--photoz-column is for models that predict the redshift, not {args.model}")
     args.output = args.output or str(RESULTS / f"{args.method}_predictions.parquet")
     return args
 
@@ -163,6 +176,12 @@ def run_parsnip(args):
     hyrax_parsnip.configure(h, args.catalog, pretrained=args.model)
     for key, value in catalog_settings(hyrax_parsnip.RUBIN_DIA_SETTINGS, args).items():
         h.set_config(f"data_set.ParsnipHATSDataset.{key}", value)
+    if args.photoz_column:
+        h.set_config("data_set.ParsnipHATSDataset.photoz_column", args.photoz_column)
+        if args.photoz_error is not None:
+            h.set_config("model.HyraxParsnip.photoz_fractional_error", args.photoz_error)
+        error = h.config["model"]["HyraxParsnip"]["photoz_fractional_error"]
+        print(f"Host photo-z prior: '{args.photoz_column}' with error {error} (1+z), instead of the constant prior.")
 
     predictions = hyrax_parsnip.load_predictions(h.infer())
     valid = np.isfinite(np.asarray(predictions["s1"]))
@@ -177,6 +196,9 @@ def run_parsnip(args):
         if info and info.get("photoz_prior") and info["photoz_prior"] != [float(prior["photoz"]), float(prior["photoz_error"])]:
             print(f"Warning: the classifier was trained with photo-z prior {info['photoz_prior']}, "
                   f"now {[prior['photoz'], prior['photoz_error']]}.")
+        if info and info.get("photoz_prior") and args.photoz_column:
+            print(f"Warning: the classifier was trained with the constant photo-z prior {info['photoz_prior']}, "
+                  f"now a per-object prior from '{args.photoz_column}'.")
         probabilities = hyrax_parsnip.classify(hyrax_parsnip.load_classifier(args.classifier), predictions)
         class_names = probabilities.colnames[1:]
         for name in class_names:
@@ -187,7 +209,8 @@ def run_parsnip(args):
         print("No --classifier: writing ParSNIP features only (no class probabilities).")
         predictions["predicted_class"] = np.full(len(predictions), "", dtype="<U1")
     predictions.remove_column("original_object_id")
-    return predictions, takes_redshift(h)
+    # A photo-z prior from a per-object redshift carries redshift information too.
+    return predictions, takes_redshift(h) or bool(args.photoz_column)
 
 
 def run_snn(args):
@@ -231,7 +254,8 @@ def main():
     if args.method == "parsnip":
         predictions["classifier"] = Path(args.classifier).name if args.classifier else ""
     if redshift_input:
-        print(f"Note: {args.model} takes the redshift from '{args.redshift_column}' as input.")
+        column = args.redshift_column or getattr(args, "photoz_column", None)
+        print(f"Note: {args.model} is given the redshift from '{column}' (marked redshift_input).")
 
     classified = np.asarray(predictions["predicted_class"])
     if (classified != "").any():

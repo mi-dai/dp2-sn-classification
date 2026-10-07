@@ -21,6 +21,10 @@ threads = 1
 # the redshift comes from the light curve itself.
 photoz = 0.5
 photoz_error = 1.0
+# Objects with a per-object photo-z (dataset `photoz_column`, e.g. the true redshift of a
+# simulation, to test the photo-z estimate) get it instead, with error
+# photoz_fractional_error * (1 + photoz).
+photoz_fractional_error = 0.05
 
 # Apply ParSNIP's light-curve augmentation (drop points, time shift, noise,
 # amplitude scaling) in train_batch.
@@ -36,6 +40,10 @@ id_column = "object_id"
 redshift_column = "redshift"
 # Milky Way E(B-V) column, or false to assume no MW extinction correction.
 mwebv_column = false
+
+# Per-object host photo-z for models that predict redshift (see
+# [model.HyraxParsnip] photoz_fractional_error); false: the constant prior for every object.
+photoz_column = false
 # Class label column, or false if the catalog is unlabeled.
 label_column = false
 # For training (field `label_index`): how labels map to classes ("ia": SNIa vs non-SNIa,

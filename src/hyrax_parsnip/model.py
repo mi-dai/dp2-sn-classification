@@ -8,7 +8,7 @@ import torch.nn as nn
 from hyrax.models import hyrax_model
 from hyrax.models.model_registry import _torch_save
 
-from hyrax_parsnip.lightcurves import batch_to_tables
+from hyrax_parsnip.lightcurves import _to_numpy, batch_to_tables
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,7 @@ class HyraxParsnip(nn.Module):
         self.device_setting = str(settings["device"])
         self.photoz = float(settings["photoz"])
         self.photoz_error = float(settings["photoz_error"])
+        self.photoz_fractional_error = float(settings["photoz_fractional_error"])
 
         self.parsnip = self._build_parsnip(settings)
 
@@ -153,7 +154,7 @@ class HyraxParsnip(nn.Module):
     @staticmethod
     def prepare_inputs(data_dict):
         """Unpack the collated batch into float32 arrays
-        ``(lightcurve, lengths, time_offset, redshift, mwebv)``.
+        ``(lightcurve, lengths, time_offset, redshift, mwebv, photoz)``.
 
         Hyrax may place inputs on devices without float64 support (e.g. MPS), so each
         light curve's times are split into an integer-day ``time_offset`` (exact in
@@ -174,12 +175,14 @@ class HyraxParsnip(nn.Module):
 
         redshift = np.asarray(data.get("redshift", np.full(n_objects, np.nan)))
         mwebv = np.asarray(data.get("mwebv", np.zeros(n_objects)))
+        photoz = np.asarray(data.get("photoz", np.full(n_objects, np.nan)))
         return (
             lightcurve.astype(np.float32),
             lengths,
             time_offset.astype(np.float32),
             redshift.astype(np.float32),
             mwebv.astype(np.float32),
+            photoz.astype(np.float32),
         )
 
     def forward(self, batch):
@@ -203,14 +206,20 @@ class HyraxParsnip(nn.Module):
         from parsnip import preprocess_light_curve
 
         self._sync_device()
-        tables = batch_to_tables(*batch, band_names=self.band_names)
+        tables = batch_to_tables(*batch[:5], band_names=self.band_names)
         if self.parsnip.settings["predict_redshift"]:
             # Photo-z models read these PLAsTiCC-style keys. The host photo-z is an
             # encoder input only; the redshift itself is predicted from the light curve.
-            for table in tables:
+            # A per-object photo-z (dataset photoz_column) replaces the constant prior.
+            photoz = _to_numpy(batch[5]).astype(np.float64) if len(batch) > 5 else np.full(len(tables), np.nan)
+            for table, z in zip(tables, photoz):
                 table.meta["hostgal_specz"] = table.meta["redshift"]
-                table.meta["hostgal_photoz"] = self.photoz
-                table.meta["hostgal_photoz_err"] = self.photoz_error
+                if np.isfinite(z):
+                    table.meta["hostgal_photoz"] = float(z)
+                    table.meta["hostgal_photoz_err"] = self.photoz_fractional_error * (1 + float(z))
+                else:
+                    table.meta["hostgal_photoz"] = self.photoz
+                    table.meta["hostgal_photoz_err"] = self.photoz_error
         return [preprocess_light_curve(t, self.parsnip.settings, raise_on_invalid=False) for t in tables]
 
     def infer_batch(self, batch):

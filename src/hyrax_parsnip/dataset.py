@@ -22,6 +22,7 @@ class ParsnipHATSDataset(HyraxDataset):
     ------
     object_id : str
     redshift : float
+    photoz : float, per-object host photo-z prior for photo-z models (NaN without ``photoz_column``)
     mwebv : float (0 when no ``mwebv_column`` is configured)
     label : str (requires ``label_column``)
     label_index : int, index into `label_classes` of the label mapped by ``label_scheme``
@@ -53,8 +54,8 @@ class ParsnipHATSDataset(HyraxDataset):
             nested += list(settings.get("flag_columns") or [])
             columns = [settings["id_column"]]
             columns += [f"{settings['lightcurve_column']}.{name}" for name in nested]
-            for key in ("redshift_column", "mwebv_column", "label_column"):
-                if settings.get(key):
+            for key in ("redshift_column", "photoz_column", "mwebv_column", "label_column"):
+                if settings.get(key) and settings[key] not in columns:  # e.g. photoz_column = redshift_column
                     columns.append(settings[key])
             kwargs["columns"] = columns
 
@@ -121,6 +122,7 @@ class ParsnipHATSDataset(HyraxDataset):
         self._stops = offsets[1:][keep]
         self._object_ids = frame[settings["id_column"]].astype(str).to_numpy()[keep]
         self._redshift = redshift[keep]
+        self._photoz = self._column(frame, settings.get("photoz_column"), np.nan)[keep]
         self._mwebv = self._column(frame, settings.get("mwebv_column"), 0.0)[keep]
         label_column = settings.get("label_column")
         self._labels = frame[label_column].astype(str).to_numpy()[keep] if label_column else None
@@ -152,6 +154,9 @@ class ParsnipHATSDataset(HyraxDataset):
 
     def get_redshift(self, idx: int) -> float:
         return np.float64(self._redshift[idx])
+
+    def get_photoz(self, idx: int) -> float:
+        return np.float64(self._photoz[idx])
 
     def get_mwebv(self, idx: int) -> float:
         return np.float64(self._mwebv[idx])

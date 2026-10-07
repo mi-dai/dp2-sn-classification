@@ -465,7 +465,7 @@ def evaluate(frame, table, classes, out_dir, threshold=0.5, binary_class=None):
     with_redshift = used_redshift(table)
     metrics["redshift_input"] = with_redshift
     warning = (
-        f"WARNING: {model} was given each object's redshift as input (classify_rubin_dia.py --redshift-column); "
+        f"WARNING: {model} was given each object's redshift as input (classify_rubin_dia.py --redshift-column or --photoz-column); "
         "these results include redshift information."
     )
     note = "\nmodel given the redshift" if with_redshift else ""

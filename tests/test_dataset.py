@@ -30,6 +30,14 @@ def test_getters(hyrax_instance, hats_catalog):
     assert np.any(lightcurve[:, 0] % 1 > 0)
     assert np.isfinite(dataset.get_redshift(0))
     assert dataset.get_mwebv(0) == 0.0
+    assert np.isnan(dataset.get_photoz(0))  # no photoz_column
+
+
+def test_photoz_column(hyrax_instance, hats_catalog):
+    configure(hyrax_instance, hats_catalog)
+    hyrax_instance.set_config("data_set.ParsnipHATSDataset.photoz_column", "redshift")
+    dataset = ParsnipHATSDataset(hyrax_instance.config, data_location=hats_catalog)
+    assert all(dataset.get_photoz(i) == dataset.get_redshift(i) for i in range(len(dataset)))
 
 
 def test_collate_pads(hyrax_instance, hats_catalog):

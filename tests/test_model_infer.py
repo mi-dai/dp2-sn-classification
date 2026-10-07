@@ -96,3 +96,28 @@ def test_photoz_model_without_redshift(hyrax_instance, hats_catalog):
     assert np.isfinite(redshift).all()
     assert (redshift >= 0).all()
     assert np.isfinite(np.asarray(predictions["s1"])).all()
+
+
+def test_photoz_prior_from_column(hats_catalog, tmp_path):
+    """A per-object photo-z (photoz_column) replaces the constant prior; objects without one keep it."""
+    from hyrax import Hyrax
+
+    results = {}
+    for name, column in (("constant", False), ("column", "redshift")):
+        h = Hyrax()
+        h.set_config("general.results_dir", str(tmp_path / name))
+        h.set_config("data_loader.batch_size", 8)
+        configure(h, hats_catalog, pretrained="plasticc_photoz")
+        h.set_config("data_set.ParsnipHATSDataset.photoz_column", column)
+        h.set_config("model.HyraxParsnip.photoz_fractional_error", 0.01)
+        predictions = load_predictions(h.infer())
+        predictions.sort("object_id")
+        results[name] = predictions
+
+    constant, column = results["constant"], results["column"]
+    np.testing.assert_array_equal(constant["object_id"], column["object_id"])
+    z_constant, z_column = np.asarray(constant["predicted_redshift"]), np.asarray(column["predicted_redshift"])
+    has_photoz = np.asarray(constant["object_id"]) != "no_redshift"
+    assert np.isfinite(z_column).all()
+    assert not np.allclose(z_constant[has_photoz], z_column[has_photoz])
+    np.testing.assert_allclose(z_constant[~has_photoz], z_column[~has_photoz], rtol=1e-5)
