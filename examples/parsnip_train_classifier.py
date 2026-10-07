@@ -1,7 +1,7 @@
 """Train ParSNIP's LightGBM classifier on a labeled catalog (default: PLAsTiCC).
 
     python examples/parsnip_train_classifier.py [data/plasticc_hats] \\
-        [--output plasticc_classifier.pkl] [--classes dp2] [--redshift-column redshift]
+        [--output plasticc_classifier.pkl] [--classes {ia,dp2,all}] [--redshift-column redshift]
 
 Runs a pretrained ParSNIP model over a labeled HATS catalog (e.g. from
 ``plasticc_to_hats.py``), trains ``parsnip.Classifier`` on the features with K-folding,
@@ -15,8 +15,11 @@ prints the K-fold (out-of-sample) performance, and writes:
 
 Default model ``plasticc_photoz`` with the same constant weak photo-z prior used when
 classifying DP2, so no external redshift is used; ``--redshift-column`` trains the
-``plasticc`` (redshift-input) variant instead. ``--classes dp2`` (default) predicts SNIa,
-SNII, SNIbc and "other" (every other type); ``--classes all`` keeps every catalog type.
+``plasticc`` (redshift-input) variant instead.
+
+Classes: ``--classes ia`` (default) is binary, SNIa vs non-SNIa (every other type, including
+SNIa-91bg and SNIax); ``dp2`` predicts SNIa, SNII, SNIbc and "other"; ``all`` keeps every
+catalog type.
 """
 
 import argparse
@@ -34,10 +37,13 @@ DP2_CLASSES = ["SNIa", "SNII", "SNIbc"]
 
 
 def class_labels(types, scheme: str) -> np.ndarray:
+    """Training labels: `ia` SNIa vs non-SNIa, `dp2` SNIa/SNII/SNIbc/other, `all` the catalog types."""
     types = np.asarray(types, dtype=str)
-    if scheme == "all":
-        return types
-    return np.where(np.isin(types, DP2_CLASSES), types, "other")
+    if scheme == "ia":
+        return np.where(types == "SNIa", "SNIa", "non-SNIa")
+    if scheme == "dp2":
+        return np.where(np.isin(types, DP2_CLASSES), types, "other")
+    return types
 
 
 def main():
@@ -48,7 +54,7 @@ def main():
     parser.add_argument("--redshift-column", help="Per-object redshift column to give the model (e.g. redshift)")
     parser.add_argument("--mwebv-column", default="mwebv", help="Milky Way E(B-V) column ('' for none)")
     parser.add_argument("--label-column", default="type", help="Class label column")
-    parser.add_argument("--classes", choices=["dp2", "all"], default="dp2")
+    parser.add_argument("--classes", choices=["ia", "dp2", "all"], default="ia", help="Class scheme (default: SNIa vs non-SNIa)")
     parser.add_argument("--num-folds", type=int, default=5)
     parser.add_argument(
         "--min-child-weight", type=float, default=10.0,

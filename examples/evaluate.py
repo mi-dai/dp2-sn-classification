@@ -20,10 +20,14 @@ through ``luminosity`` and the rest-frame latents.
 
 Scoring depends on the classes:
 - matched (the classes are the true types, possibly plus extra ones, e.g. a classifier
-  trained on PLAsTiCC with SNIa/SNII/SNIbc/other): confusion matrix, accuracy, recall per type;
-- target (classes that aren't true types, e.g. SuperNNova's SNIa/other or broad classes):
-  the first class is the target, scored as SNIa → type SNIa, SN → any SN, and any other
-  class (Fast, Long, ...) has no members in the simulation.
+  trained on PLAsTiCC with --classes dp2, SNIa/SNII/SNIbc/other): confusion matrix, accuracy, recall per type;
+- target (classes that aren't true types, e.g. SNIa vs non-SNIa, SuperNNova's SNIa/other or
+  broad classes): the target is SNIa if it is a class, otherwise the first class, scored as
+  SNIa → type SNIa, SN → any SN, and any other class (Fast, Long, ...) has no members in the
+  simulation.
+
+`evaluate()` makes the same figures from Python (e.g. the demo notebook): join an in-memory
+predictions table with `prepare(predictions, load_truth(catalog)[1])` first.
 
 Saves, in DIR:
 - ``sample.png``: true redshift and number of detections per type
@@ -143,14 +147,23 @@ def load(catalog_path, predictions_path, args):
             "PREDICTIONS has no class probabilities. Run classify_rubin_dia.py --method parsnip with --classifier, "
             "use --method snn, or pass --kfold-lightgbm (trains on this catalog)."
         )
-    classes = [c[2:] for c in predictions if c.startswith("p_")]
+    table, classes = prepare(predictions, truth)
+    return frame, table, classes
 
-    table = predictions.merge(truth, on="diaObjectId", how="left")
+
+def prepare(predictions: pd.DataFrame, truth: pd.DataFrame):
+    """Join a predictions table (`diaObjectId`, `p_<class>`, `predicted_class`, ...) with the truth.
+
+    Returns the joined table and the class names (from the `p_` columns).
+    """
+    classes = [c[2:] for c in predictions if c.startswith("p_")]
+    truth_columns = [c for c in truth if c == "diaObjectId" or c not in predictions]
+    table = predictions.merge(truth[truth_columns], on="diaObjectId", how="left")
     if table["type"].isna().any():
         raise SystemExit("Some predictions have no truth: is PREDICTIONS from this CATALOG?")
     probs = table[[f"p_{c}" for c in classes]].to_numpy()
     table["p_max"] = np.nanmax(np.where(np.isfinite(probs), probs, -np.inf), axis=1)
-    return frame, table, classes
+    return table, classes
 
 
 def used_redshift(table) -> bool:
@@ -404,6 +417,97 @@ def plot_latent(table, types, path):
 # ── main ─────────────────────────────────────────────────────────────────────
 
 
+def choose_target(classes, binary_class=None):
+    """The class scored as the target: --binary-class, else SNIa if it is a class, else the first class."""
+    if binary_class:
+        return binary_class
+    return "SNIa" if "SNIa" in classes else classes[0]
+
+
+def evaluate(frame, table, classes, out_dir, threshold=0.5, binary_class=None):
+    """Make the diagnostic figures for one predictions table (joined with the truth by `prepare`) and print a summary.
+
+    Returns ``{"figures": [paths in display order], "metrics": {...}}``.
+    """
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    figures, metrics = [], {}
+    types = sorted(table["type"].unique())
+    # Matched: the classes are the true types, possibly plus extra ones (e.g. a classifier's "other").
+    matched = set(types) <= set(classes) or set(classes) <= set(types)
+    classified = (table["predicted_class"] != "").to_numpy()
+    method = table["method"].iloc[0] if "method" in table else "parsnip"
+    model = table["model"].iloc[0] if "model" in table else "?"
+    print(f"{method}/{model}: {classified.sum()} of {len(table)} objects classified; classes {classes}")
+    with_redshift = used_redshift(table)
+    metrics["redshift_input"] = with_redshift
+    warning = (
+        f"WARNING: {model} was given each object's redshift as input (classify_rubin_dia.py --redshift-column); "
+        "these results include redshift information."
+    )
+    note = "\nmodel given the redshift" if with_redshift else ""
+    if with_redshift:
+        print(warning)
+
+    def save(plot, name, *args, **kwargs):
+        path = out / name
+        result = plot(*args, path, **kwargs)
+        figures.append(path)
+        return result
+
+    save(plot_sample, "sample.png", table, types)
+    save(plot_lightcurves, "lightcurves.png", frame, table, types, matched)
+    if matched:
+        save(plot_class_matrix, "confusion.png", table, types, classes, True, note=note)
+        correct = (table["type"] == table["predicted_class"]).to_numpy()
+        save(
+            plot_recall, "recall.png", table, types, correct, "recall (fraction correct)",
+            "Recall per true type (dotted: chance)", chance=1 / len(classes),
+        )
+        metrics["accuracy"] = float(correct[classified].mean())
+        print(f"accuracy {metrics['accuracy']:.3f}")
+        for label in types:
+            sel = classified & (table["type"] == label).to_numpy()
+            metrics[f"recall_{label}"] = float(correct[sel].mean())
+            print(f"  {label}: recall {correct[sel].mean():.3f} ({sel.sum()})")
+        target = binary_class if binary_class else None
+    else:
+        target = choose_target(classes)
+        save(plot_class_matrix, "predicted.png", table, types, classes, False, note=note)
+        save(plot_probability, "probability.png", table, target, types)
+        selected = (table[f"p_{target}"] >= threshold).to_numpy()
+        save(
+            plot_recall, "recall.png", table, types, selected, f"fraction with P({target}) ≥ {threshold}",
+            f"Classified as {target}, per true type",
+        )
+        for label in types:
+            sel = classified & (table["type"] == label).to_numpy()
+            metrics[f"selected_{label}"] = float(selected[sel].mean())
+            print(f"  {label}: {selected[sel].mean():.3f} with P({target}) >= {threshold}")
+
+    if target is not None:
+        t = table[classified]
+        members = target_members(t["type"], target) if not matched else (t["type"] == target).to_numpy()
+        if members.any() and not members.all():
+            auc = save(plot_roc, "roc.png", t, target, members)
+            selected = (t[f"p_{target}"] >= threshold).to_numpy()
+            purity = members[selected].mean() if selected.any() else float("nan")
+            metrics.update(
+                target=target, auc=float(auc), efficiency=float(selected[members].mean()), purity=float(purity)
+            )
+            print(f"{target} vs rest: AUC {auc:.3f}; at {threshold}: efficiency {selected[members].mean():.3f}, purity {purity:.3f}")
+
+    if "predicted_redshift" in table and np.isfinite(table["predicted_redshift"]).any():
+        save(plot_redshift, "redshift.png", table, types)
+    if {"s1", "s2", "s3", "color", "luminosity"} <= set(table.columns):
+        save(plot_latent, "latent.png", table, types)
+    table.to_parquet(out / "evaluation.parquet")
+    print(f"Wrote figures to {out}")
+    if with_redshift:
+        print(warning)
+    return {"figures": figures, "metrics": metrics}
+
+
 def main():
     # Figures are only written to files. Set here, not at import, so notebooks can use the plot helpers.
     matplotlib.use("Agg")
@@ -421,69 +525,8 @@ def main():
     if args.binary_class and not args.kfold_lightgbm:
         parser.error("--binary-class is only used with --kfold-lightgbm")
 
-    out = Path(args.output_dir)
-    out.mkdir(parents=True, exist_ok=True)
     frame, table, classes = load(args.catalog, args.predictions, args)
-    types = sorted(table["type"].unique())
-    # Matched: the classes are the true types, possibly plus extra ones (e.g. a classifier's "other").
-    matched = set(types) <= set(classes) or set(classes) <= set(types)
-    classified = (table["predicted_class"] != "").to_numpy()
-    method = table["method"].iloc[0] if "method" in table else "parsnip"
-    model = table["model"].iloc[0] if "model" in table else "?"
-    print(f"{method}/{model}: {classified.sum()} of {len(table)} objects classified; classes {classes}")
-    with_redshift = used_redshift(table)
-    warning = (
-        f"WARNING: {model} was given each object's redshift as input (classify_rubin_dia.py --redshift-column); "
-        "these results include redshift information."
-    )
-    note = "\nmodel given the redshift" if with_redshift else ""
-    if with_redshift:
-        print(warning)
-
-    plot_sample(table, types, out / "sample.png")
-    plot_lightcurves(frame, table, types, matched, out / "lightcurves.png")
-    if matched:
-        plot_class_matrix(table, types, classes, True, out / "confusion.png", note)
-        correct = (table["type"] == table["predicted_class"]).to_numpy()
-        plot_recall(
-            table, types, correct, "recall (fraction correct)", "Recall per true type (dotted: chance)",
-            out / "recall.png", chance=1 / len(classes),
-        )
-        print(f"accuracy {correct[classified].mean():.3f}")
-        for label in types:
-            sel = classified & (table["type"] == label).to_numpy()
-            print(f"  {label}: recall {correct[sel].mean():.3f} ({sel.sum()})")
-        target = args.binary_class if args.binary_class else None
-    else:
-        target = classes[0]
-        plot_class_matrix(table, types, classes, False, out / "predicted.png", note)
-        plot_probability(table, target, types, out / "probability.png")
-        selected = (table[f"p_{target}"] >= args.threshold).to_numpy()
-        plot_recall(
-            table, types, selected, f"fraction with P({target}) ≥ {args.threshold}",
-            f"Classified as {target}, per true type", out / "recall.png",
-        )
-        for label in types:
-            sel = classified & (table["type"] == label).to_numpy()
-            print(f"  {label}: {selected[sel].mean():.3f} with P({target}) >= {args.threshold}")
-
-    if target is not None:
-        t = table[classified]
-        members = target_members(t["type"], target) if not matched else (t["type"] == target).to_numpy()
-        if members.any() and not members.all():
-            auc = plot_roc(t, target, members, out / "roc.png")
-            selected = (t[f"p_{target}"] >= args.threshold).to_numpy()
-            purity = members[selected].mean() if selected.any() else float("nan")
-            print(f"{target} vs rest: AUC {auc:.3f}; at {args.threshold}: efficiency {selected[members].mean():.3f}, purity {purity:.3f}")
-
-    if "predicted_redshift" in table and np.isfinite(table["predicted_redshift"]).any():
-        plot_redshift(table, types, out / "redshift.png")
-    if {"s1", "s2", "s3", "color", "luminosity"} <= set(table.columns):
-        plot_latent(table, types, out / "latent.png")
-    table.to_parquet(out / "evaluation.parquet")
-    print(f"Wrote figures to {out}")
-    if with_redshift:
-        print(warning)
+    evaluate(frame, table, classes, args.output_dir, args.threshold, args.binary_class)
 
 
 if __name__ == "__main__":

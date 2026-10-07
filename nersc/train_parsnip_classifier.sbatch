@@ -6,7 +6,8 @@
 #SBATCH --mem=32G
 #SBATCH --time=03:00:00
 #SBATCH --output=nersc/logs/%x-%j.out
-# PLAsTiCC (training set + test-set DDF, 40,774 objects) -> HATS -> ParSNIP features -> LightGBM classifier.
+# PLAsTiCC (training set + test-set DDF, 40,774 objects) -> HATS -> ParSNIP features -> LightGBM classifier
+# (SNIa vs non-SNIa; pass --classes dp2 for SNIa/SNII/SNIbc/other).
 # Writes plasticc_classifier.pkl / .json / _out_of_sample.parquet in the repo root. Submit from the repo root:
 #   sbatch -A <account> -q <qos> nersc/train_parsnip_classifier.sbatch [extra args for parsnip_train_classifier.py]
 # The PLAsTiCC files are downloaded by nersc/prefetch.py (run by setup_env.sh) on the login node.

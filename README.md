@@ -11,7 +11,7 @@ catalogs. Two classifiers are available, each as its own package in the `dp2-sn-
 | Training needed | the LightGBM classifier, once (here: on PLAsTiCC) | none (inference only) |
 | Without redshift | `plasticc_photoz` (predicts the redshift) | `elasticc_ia`, `SN_vs_other` |
 | With redshift | `plasticc` | `elasticc_broad`, `*_vs_other` |
-| Classes | what the classifier is trained on (here: SNIa, SNII, SNIbc, other) | fixed by the model (e.g. SNIa/other; SN/Fast/Long/Periodic/NonPeriodic) |
+| Classes | what the classifier is trained on (here: SNIa vs non-SNIa by default) | fixed by the model (e.g. SNIa/other; SN/Fast/Long/Periodic/NonPeriodic) |
 | Also gives | latent features, predicted redshift; optional fine-tuning | |
 
 Both read the same catalogs with the same dataset class and Rubin DIA settings, and the example
@@ -176,6 +176,9 @@ objects it prevents every split and all probabilities come out equal, so pass e.
 
 Here the classifier is trained on PLAsTiCC with `examples/parsnip_train_classifier.py` (see
 [Workflow](#workflow)):
+- By default it is binary, **SNIa vs non-SNIa** (every other PLAsTiCC type, including SNIa-91bg and SNIax), which
+  compares directly with SuperNNova's `elasticc_ia`. `--classes dp2` trains SNIa, SNII, SNIbc and "other";
+  `--classes all` every PLAsTiCC type.
 - By default the features come from `plasticc_photoz` with the same weak photo-z prior used for DP2, so no
   external redshift is involved. `--redshift-column redshift` trains the `plasticc` (true-redshift) variant.
   The classifier has no redshift feature, but with `plasticc` the redshift enters through `luminosity` and
@@ -185,9 +188,10 @@ Here the classifier is trained on PLAsTiCC with `examples/parsnip_train_classifi
   setting, since the features would differ.
 - Fluxes are used as distributed: ParSNIP was trained on these values, and DP2's nJy fluxes are converted to
   the same scale (zp 27.5).
-- On the training set alone, K-fold accuracy is 0.85 (SNIa recall 0.91). Applied without retraining to an
-  independent toy simulation (sncosmo SN Ia/II-P/Ib/c), accuracy was 0.71, with SN Ib/c the weakest (often
-  called SNIa).
+- Trained on the PLAsTiCC training set alone, the binary classifier's K-fold accuracy is 0.93 (SNIa recall 0.925).
+  Applied without retraining to an independent toy simulation (sncosmo SN Ia/II-P/Ib/c), SN Ia vs rest AUC was
+  0.95 (efficiency 0.90, purity 0.70 at P(SNIa) ≥ 0.5); the contamination is mostly SN Ib/c (37% called SNIa).
+  The 4-class version (`--classes dp2`) reached K-fold accuracy 0.85, and 0.71 on the toy simulation.
 
 ### Training and fine-tuning ParSNIP (optional)
 

@@ -28,7 +28,7 @@ Submit from the repo root, passing the user's account and QOS (not stored in the
 | job | does | outputs |
 |---|---|---|
 | `simulate_dp2.sbatch [OUT] [N_PER_CLASS]` | DP2 validation simulation (SN Ia/II/Ib/c, DP2 DIA schema + truth) | `data/dp2_sim_sne` |
-| `train_parsnip_classifier.sbatch` | PLAsTiCC (train + test DDF, 40,774 objects) → ParSNIP features → LightGBM | `plasticc_classifier.{pkl,json}` |
+| `train_parsnip_classifier.sbatch` | PLAsTiCC (train + test DDF, 40,774 objects) → ParSNIP features → LightGBM (SNIa vs non-SNIa) | `plasticc_classifier.{pkl,json}` |
 | `validate.sbatch [CATALOG] [CLASSIFIER]` | both models on the simulation + `evaluate.py` | `results/validate/` |
 | `classify_edp2.sbatch [CATALOG] [CLASSIFIER]` | both models on the real EDP2 catalog, no redshift | `results/edp2/` |
 
@@ -48,7 +48,8 @@ classifier in the repo root. If the classifier is missing it trains it in the no
 - The DP2 simulation is for **validation only**: don't train on it (`evaluate.py --kfold-lightgbm` is a quick
   check, not a result).
 - Real data are classified **without redshift**: ParSNIP `plasticc_photoz` with the PLAsTiCC classifier;
-  SuperNNova `elasticc_ia`. Results from models given the true redshift are flagged by `evaluate.py`.
+  SuperNNova `elasticc_ia`. Both are SNIa vs non-SNIa by default (`parsnip_train_classifier.py --classes dp2`
+  gives SNIa/SNII/SNIbc/other). Results from models given the true redshift are flagged by `evaluate.py`.
 - A ParSNIP classifier only applies to features from the same ParSNIP model and redshift setting; its `.json`
   is checked by `classify_rubin_dia.py`.
 - SuperNNova's input options (`--detection-snr`, `--no-time-window`, `--fink-exact`) are still being chosen by
