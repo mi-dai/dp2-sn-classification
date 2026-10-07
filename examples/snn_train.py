@@ -15,6 +15,8 @@ trained on. The result is an ordinary SuperNNova model directory (``cli_args.jso
 - No redshift by default; ``--redshift-column`` trains a model that takes the redshift.
 - Fluxes are used as given and their zeropoint is recorded (``--flux-zeropoint``, 27.5 for
   PLAsTiCC), so DP2 nJy fluxes are rescaled to match when classifying.
+- ``--resume latest`` (or a checkpoint / Hyrax train run directory) continues an interrupted
+  run, e.g. a batch job that hit its time limit, with the same command; ``--epochs`` is the total.
 - A fraction of the catalog (``--validate-fraction``) is held out: its loss drives the learning
   rate (reduced 10x on plateau), the weights of the epoch with the lowest validation loss are
   kept (as SuperNNova), and the script reports the accuracy and per-class recall on it.
@@ -23,15 +25,18 @@ trained on. The result is an ordinary SuperNNova model directory (``cli_args.jso
 import argparse
 import json
 import shutil
+import tomllib
 from pathlib import Path
 
 import numpy as np
+import torch
 from hyrax import Hyrax
 
 import hyrax_snn
 from hyrax_parsnip.labels import SCHEMES
 from hyrax_snn.config import SNN_BAND_MAP
-from hyrax_snn.training import training_dataset
+from hyrax_snn.pretrained import load_settings
+from hyrax_snn.training import find_checkpoint, training_dataset
 
 EXAMPLES = Path(__file__).resolve().parent
 DEFAULT_OUTPUT = EXAMPLES / "models" / "snn_plasticc"
@@ -56,12 +61,28 @@ def main():
         "--results-dir", default=str(EXAMPLES / "results" / "hyrax"), help="Hyrax run directory"
     )
     parser.add_argument("--overwrite", action="store_true", help="Replace an existing model directory")
+    parser.add_argument(
+        "--resume",
+        metavar="{CHECKPOINT,RUN_DIR,latest}",
+        help="Continue an interrupted run from a Hyrax checkpoint ('latest': newest run in --results-dir)",
+    )
     args = parser.parse_args()
 
     output = Path(args.output).resolve()
-    if output.exists():
+    checkpoint = None
+    if args.resume:
+        if args.overwrite:
+            parser.error("--resume continues training in the existing model directory; drop --overwrite")
+        if not (output / "cli_args.json").exists():
+            parser.error(f"--resume needs the model directory of the interrupted run; no {output}/cli_args.json")
+        try:
+            checkpoint = find_checkpoint(args.resume, args.results_dir)
+        except FileNotFoundError as error:
+            parser.error(str(error))
+        check_resume(parser, checkpoint, output, args)
+    elif output.exists():
         if not args.overwrite:
-            parser.error(f"{output} exists; pass --overwrite to replace it")
+            parser.error(f"{output} exists; pass --overwrite to replace it (or --resume to continue training)")
         shutil.rmtree(output)
     redshift = "zspe" if args.redshift_column else "none"
     dataset_settings = {
@@ -88,17 +109,22 @@ def main():
     h.set_config("split.validate", args.validate_fraction)
     h.set_config("split.rng_seed", args.seed)
 
-    # 1. New model directory: features, classes, normalization and class weights from the catalog.
+    # 1. New model directory: features, classes, normalization and class weights from the catalog
+    # (kept as is when resuming).
     dataset = training_dataset(h, args.catalog, dataset_settings, redshift)
-    settings = hyrax_snn.new_model_dir(
-        output,
-        dataset,
-        list(SNN_BAND_MAP.values()),
-        h.config["model"]["HyraxSNN"],
-        redshift=redshift,
-        flux_zeropoint=args.flux_zeropoint,
-    )
-    print(f"New model in {output}: classes {settings.class_names}, {len(dataset)} objects")
+    if checkpoint:
+        settings = load_settings(output)
+        h.set_config("train.resume", str(checkpoint))
+    else:
+        settings = hyrax_snn.new_model_dir(
+            output,
+            dataset,
+            list(SNN_BAND_MAP.values()),
+            h.config["model"]["HyraxSNN"],
+            redshift=redshift,
+            flux_zeropoint=args.flux_zeropoint,
+        )
+        print(f"New model in {output}: classes {settings.class_names}, {len(dataset)} objects")
 
     # 2. Train on the train split, validate on the rest.
     hyrax_snn.configure(
@@ -136,14 +162,38 @@ def main():
         "batch_size": args.batch_size,
         "validate_fraction": args.validate_fraction,
         "best_epoch": model.best_epoch,
-        "validation_history": [{"loss": loss, "accuracy": acc} for loss, acc in model.validation_history],
+        # null: an epoch whose validation was lost when resuming (Hyrax checkpoints before validating)
+        "validation_history": [
+            {"loss": loss, "accuracy": acc} if np.isfinite(loss) else None for loss, acc in model.validation_history
+        ],
         "validation_objects": len(labels),
         "validation_accuracy": accuracy,
         "validation_recall": recall,
         "hyrax_run": str(run_dir),
+        "resumed_from": str(checkpoint) if checkpoint else None,
     }
     cli_path.write_text(json.dumps(cli, indent=2))
     print(f"Wrote {output}/model.pt; classify with: classify_rubin_dia.py --method snn --model {output}")
+
+
+def check_resume(parser, checkpoint, output, args):
+    """Make sure `checkpoint` continues this run: same model directory, split and batches, and
+    epochs left to train (ignite restarts from scratch once the epochs are done)."""
+    run_config = tomllib.loads((checkpoint.parent / "runtime_config.toml").read_text())
+    expected = {
+        "model directory": (run_config["model"]["HyraxSNN"]["pretrained"], str(output)),
+        "--validate-fraction": (run_config["split"].get("validate"), args.validate_fraction),
+        "--seed": (run_config["split"].get("rng_seed"), args.seed),
+        "--batch-size": (run_config["data_loader"]["batch_size"], args.batch_size),
+    }
+    for name, (before, now) in expected.items():
+        if before != now:
+            parser.error(f"--resume: {checkpoint.parent.name} used {name} {before}, now {now}")
+    state = torch.load(checkpoint, map_location="cpu", weights_only=False)["trainer"]
+    epoch = state["iteration"] // state["epoch_length"]
+    if epoch >= args.epochs:
+        parser.error(f"--resume: {checkpoint.name} is at epoch {epoch}; pass --epochs > {epoch} to train further")
+    print(f"Resuming from {checkpoint} (epoch {epoch} of {args.epochs})")
 
 
 if __name__ == "__main__":

@@ -188,6 +188,29 @@ def test_train_export_and_infer(hats_catalog, tmp_path):
     model.export_snn(output)
     assert (output / "model.pt").exists()
 
+    # Resume from the run's last checkpoint for one more epoch: weights, optimizer and the
+    # validation history come back (the checkpointed epoch's own validation is lost).
+    from hyrax_snn.training import find_checkpoint
+
+    checkpoint = find_checkpoint("latest", tmp_path / "results")
+    assert checkpoint.name == "checkpoint_epoch_2.pt"
+    h_resume = Hyrax()
+    h_resume.set_config("general.results_dir", str(tmp_path / "results"))
+    h_resume.set_config("data_loader.batch_size", 8)
+    h_resume.set_config("train.epochs", 3)
+    h_resume.set_config("split.train", 0.75)
+    h_resume.set_config("split.validate", 0.25)
+    h_resume.set_config("train.resume", str(checkpoint))
+    configure(
+        h_resume, hats_catalog, pretrained=str(output), groups=("train", "validate"), dataset_settings=dataset_settings
+    )
+    resumed = h_resume.train()
+    assert resumed._epochs_trained == 3
+    assert len(resumed.validation_history) == 3 and np.isnan(resumed.validation_history[1][0])
+    assert resumed.validation_history[0] == model.validation_history[0]
+    assert resumed.best_epoch in (1, 3)
+    resumed.export_snn(output)
+
     # The trained directory is used like a pretrained model.
     h_infer = Hyrax()
     h_infer.set_config("general.results_dir", str(tmp_path / "results"))
@@ -206,3 +229,22 @@ def test_log_standardization_clips_min():
     logs = np.log(np.clip(values, -2000.0, None) + 2000.0 + 1e-5)
     assert stats["mean"] == pytest.approx(logs.mean()) and stats["std"] == pytest.approx(logs.std())
     assert log_standardization(np.array([1.0, 2.0]))["min"] == 1.0
+
+
+def test_find_checkpoint(tmp_path):
+    from hyrax_snn.training import find_checkpoint
+
+    old, new = tmp_path / "20260101-000000-train-a", tmp_path / "20260102-000000-train-b"
+    for run, epochs in ((old, (1, 2, 10)), (new, ())):
+        run.mkdir()
+        for epoch in epochs:
+            (run / f"checkpoint_epoch_{epoch}.pt").touch()
+    (old / "checkpoint_9_validator_loss=-0.5.pt").touch()
+
+    assert find_checkpoint(old, tmp_path).name == "checkpoint_epoch_10.pt"
+    assert find_checkpoint(old / "checkpoint_epoch_2.pt", tmp_path).name == "checkpoint_epoch_2.pt"
+    assert find_checkpoint("latest", tmp_path).parent == old  # the newer run has no checkpoint
+    with pytest.raises(FileNotFoundError):
+        find_checkpoint(new, tmp_path)
+    with pytest.raises(FileNotFoundError):
+        find_checkpoint("latest", tmp_path / "missing")

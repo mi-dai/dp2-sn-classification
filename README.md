@@ -302,6 +302,11 @@ python examples/snn_train.py data/plasticc_hats [--output examples/models/snn_pl
   are kept, as in SuperNNova. Its accuracy and recall per class are printed at the end.
 - Classes from the catalog's `type` column: `ia` (default, SNIa vs non-SNIa), `dp2` (SNIa/SNII/SNIbc/other),
   `all`. No redshift by default; `--redshift-column` trains a model that takes it.
+- `--resume latest` continues an interrupted run (e.g. a batch job that hit its time limit) from the last
+  Hyrax checkpoint in `--results-dir` (or `--resume CHECKPOINT.pt` / a train run directory): weights, optimizer,
+  learning-rate schedule and validation history are restored; `--epochs` is the total. The model directory,
+  split and batch size must be the same. Hyrax checkpoints each epoch before validating it, so that epoch's
+  validation is lost (recorded as `null`; its weights can't be picked as the best).
 - About 6 s per epoch for the PLAsTiCC training set on an Apple M-series CPU, so roughly an hour for the
   training set + DDF (40,774 objects) and 90 epochs. `nersc/snn_train.sbatch` runs it at NERSC.
 

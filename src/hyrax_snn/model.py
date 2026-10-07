@@ -35,12 +35,34 @@ class ValidationPlateauScheduler:
         loss = self.model._last_validation_loss
         self.scheduler.step(self.model._epoch_loss if loss is None else loss)
         self.model._epoch_loss = 0.0
+        self.model._epochs_trained += 1
 
     def state_dict(self):
-        return self.scheduler.state_dict()
+        # Hyrax saves the scheduler in each checkpoint, so the model's training state (validation
+        # history and best weights) rides along and is restored on `train.resume`.
+        model = self.model
+        return {
+            "plateau": self.scheduler.state_dict(),
+            "epochs_trained": model._epochs_trained,
+            "validation_history": list(model.validation_history),
+            "last_validation_loss": model._last_validation_loss,
+            "best_state": model._best_state,
+        }
 
     def load_state_dict(self, state_dict):
-        self.scheduler.load_state_dict(state_dict)
+        if "plateau" not in state_dict:  # a plain ReduceLROnPlateau state
+            self.scheduler.load_state_dict(state_dict)
+            return
+        self.scheduler.load_state_dict(state_dict["plateau"])
+        self.model._epochs_trained = state_dict["epochs_trained"]
+        history = [tuple(h) for h in state_dict["validation_history"]]
+        # Hyrax saves the checkpoint before validating its last epoch: that validation is lost.
+        history += [(np.nan, np.nan)] * (self.model._epochs_trained - len(history))
+        self.model.validation_history = history
+        self.model._last_validation_loss = state_dict["last_validation_loss"]
+        best = state_dict["best_state"]
+        self.model._best_state = {k: v.cpu() for k, v in best.items()} if best else None
+
 
 # Written next to every saved weights file (including each infer results dir) so the
 # columns of the inference output can be named later.
@@ -135,6 +157,7 @@ class HyraxSNN(nn.Module):
         self._validation_sum = self._validation_correct = self._validation_count = 0.0
         self._last_validation_loss = None
         self.validation_history = []  # (loss, accuracy) of each validation epoch, over all batches
+        self._epochs_trained = 0
         self._best_state = None
 
     @property
@@ -146,9 +169,16 @@ class HyraxSNN(nn.Module):
 
     def _device(self):
         if self.device_setting == "hyrax":
-            return next(self.parameters()).device
-        self.rnn.to(self.device_setting)
-        return torch.device(self.device_setting)
+            device = next(self.parameters()).device
+        else:
+            self.rnn.to(self.device_setting)
+            device = torch.device(self.device_setting)
+        # Hyrax loads a resumed checkpoint's optimizer state onto its own device (e.g. MPS/CUDA).
+        for param_state in self.optimizer.state.values():
+            for key, value in param_state.items():
+                if torch.is_tensor(value) and value.device != device:
+                    param_state[key] = value.to(device)
+        return device
 
     def forward(self, batch):
         return self.infer_batch(batch)
@@ -255,16 +285,17 @@ class HyraxSNN(nn.Module):
         self._validation_sum = self._validation_correct = self._validation_count = 0.0
         self._last_validation_loss = loss
         self.validation_history.append((loss, accuracy))
-        if loss <= min(h[0] for h in self.validation_history):
+        if loss <= np.nanmin([h[0] for h in self.validation_history]):
             self._best_state = {k: v.detach().cpu().clone() for k, v in self.rnn.state_dict().items()}
         logger.info(f"Validation epoch {len(self.validation_history)}: loss {loss:.4f}, accuracy {accuracy:.3f}")
 
     @property
     def best_epoch(self):
         """Validation epoch (1-based) with the lowest loss, or None without validation."""
-        if not self.validation_history:
+        losses = np.array([h[0] for h in self.validation_history], dtype=float)
+        if not np.isfinite(losses).any():
             return None
-        return int(np.argmin([h[0] for h in self.validation_history])) + 1
+        return int(np.nanargmin(losses)) + 1
 
     def export_snn(self, model_dir=None, best=True):
         """Write the weights as ``model.pt`` (a SuperNNova VanillaRNN state dict) into the model

@@ -36,6 +36,35 @@ def training_dataset(h, catalog_path, dataset_settings: dict, redshift: str = "n
     return ParsnipHATSDataset(h.config, data_location=str(catalog_path))
 
 
+def find_checkpoint(resume, results_dir) -> Path:
+    """The Hyrax checkpoint to resume training from.
+
+    `resume` is a checkpoint file, a Hyrax train run directory (its latest
+    ``checkpoint_epoch_N.pt``), or ``"latest"``: the newest train run under `results_dir`
+    that has one.
+    """
+
+    def latest_in(run_dir):
+        checkpoints = list(Path(run_dir).glob("checkpoint_epoch_*.pt"))
+        return max(checkpoints, key=lambda p: int(p.stem.rsplit("_", 1)[1])) if checkpoints else None
+
+    if str(resume) == "latest":
+        runs = sorted(Path(results_dir).glob("*-train-*"), key=lambda p: p.stat().st_mtime, reverse=True)
+        found = next((c for c in map(latest_in, runs) if c is not None), None)
+        if found is None:
+            raise FileNotFoundError(f"No Hyrax train run with a checkpoint under {results_dir}")
+        return found
+    path = Path(resume)
+    if path.is_dir():
+        found = latest_in(path)
+        if found is None:
+            raise FileNotFoundError(f"No checkpoint_epoch_*.pt in {path}")
+        return found
+    if not path.is_file():
+        raise FileNotFoundError(f"No checkpoint {path}")
+    return path
+
+
 def feature_lists(filters: list[str], redshift: str = "none") -> dict:
     """SuperNNova's feature lists for `filters`, in the layout of the Fink models."""
     combos = sorted("".join(c) for n in range(1, len(filters) + 1) for c in combinations(filters, n))

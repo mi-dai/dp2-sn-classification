@@ -18,7 +18,7 @@ Supernova classification of Rubin DP2 transients with ParSNIP (`src/hyrax_parsni
 - `nersc/prefetch.py` downloads what compute nodes may not reach: SuperNNova's pretrained models
   (`~/.cache/hyrax_snn`), the PLAsTiCC files (`data/plasticc_raw`, ~330 MB), and the simulation's passbands and
   templates; it checks the SFD dust map. Each step reports and continues on failure.
-- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/pytest -q` (34 tests).
+- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/pytest -q` (35 tests).
 - `desc-td-env` path is set in `nersc/setup_env.sh` (`TD_PYTHON`, overridable).
 
 ## Running jobs
@@ -29,7 +29,7 @@ Submit from the repo root, passing the user's account and QOS (not stored in the
 |---|---|---|
 | `simulate_dp2.sbatch [OUT] [N_PER_CLASS]` | DP2 validation simulation (SN Ia/II/Ib/c, DP2 DIA schema + truth) | `data/dp2_sim_sne` |
 | `train_parsnip_classifier.sbatch` | PLAsTiCC (train + test DDF, 40,774 objects) → ParSNIP features → LightGBM (SNIa vs non-SNIa) | `examples/models/plasticc_classifier.{pkl,json}` |
-| `snn_train.sbatch` (optional) | PLAsTiCC (same catalog) → SuperNNova trained with Hyrax (SNIa vs non-SNIa, no redshift, 90 epochs) | `examples/models/snn_plasticc/` |
+| `snn_train.sbatch` (optional) | PLAsTiCC (same catalog) → SuperNNova trained with Hyrax (SNIa vs non-SNIa, no redshift, 90 epochs) | `examples/models/snn_plasticc/` (time limit hit: resubmit with `--resume latest`) |
 | `validate.sbatch [CATALOG] [CLASSIFIER]` | both models on the simulation + `evaluate.py` | `examples/results/validate/` |
 | `classify_edp2.sbatch [CATALOG] [CLASSIFIER]` | both models on the real EDP2 catalog, no redshift | `examples/results/edp2/` |
 
