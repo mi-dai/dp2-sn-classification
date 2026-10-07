@@ -34,7 +34,9 @@ Submit from the repo root, passing the user's account and QOS (not stored in the
 
 Short checks can run interactively on a login node; anything long goes through Slurm. The demo notebook
 `examples/demo_workflow.ipynb` (kernel `dp2-sn-classification (td_env)`) uses the same `data/` paths and the
-classifier in the repo root.
+classifier in the repo root. If the classifier is missing it trains it in the notebook (training set + DDF,
+~35 min; `DEMO_PLASTICC_DDF=0` for the training set only); running `train_parsnip_classifier.sbatch` first avoids that.
+`data/plasticc_hats` is always training set + DDF; `data/plasticc_hats_train` is the training set only.
 
 ## Data
 - Real target (unlabeled, no redshifts): `/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats`.

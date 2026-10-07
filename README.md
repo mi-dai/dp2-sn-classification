@@ -272,8 +272,10 @@ Shared by both classifiers:
   curves; predicted vs true redshift and latent space for ParSNIP). Probabilities are used as given;
   `--kfold-lightgbm` trains ParSNIP's classifier on the catalog instead, as a quick check only.
 - `examples/demo_workflow.ipynb`: the workflow for both models on the DP2 simulation, with SN Ia vs rest side
-  by side. It loads `data/dp2_sim_sne` if it exists and simulates otherwise; `DEMO_CATALOG` / `DEMO_CLASSIFIER`
-  override the paths. Needs the `notebook` extra (and lightcurvelynx to simulate).
+  by side. It loads `data/dp2_sim_sne` if it exists and simulates otherwise, and trains the PLAsTiCC
+  classifier if `plasticc_classifier.pkl` doesn't exist yet (training set + DDF, ~35 min; `DEMO_PLASTICC_DDF=0`
+  for the training set only, ~7 min). `DEMO_CATALOG` / `DEMO_CLASSIFIER` override the paths. Needs the `notebook`
+  extra (and lightcurvelynx to simulate).
 - `examples/simulate_dp2.py`: the DP2 validation simulation, e.g.
   `python examples/simulate_dp2.py data/dp2_sim_sne --n-per-class 5000` for a larger set.
 
