@@ -62,7 +62,7 @@ def main():
         help="LightGBM min_child_weight (ParSNIP's 1000 suits millions of augmented rows)",
     )
     parser.add_argument("--batch-size", type=int, default=256)
-    parser.add_argument("--results-dir", default="./results")
+    parser.add_argument("--results-dir", default=str(DEFAULT_OUTPUT.parents[1] / "results" / "hyrax"), help="Hyrax run directory")
     args = parser.parse_args()
 
     model = args.model or ("plasticc" if args.redshift_column else "plasticc_photoz")

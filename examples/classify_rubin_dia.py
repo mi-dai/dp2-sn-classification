@@ -39,6 +39,7 @@ import hyrax_parsnip
 import hyrax_snn
 
 DEFAULT_CATALOG = "/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats"
+RESULTS = Path(__file__).resolve().parent / "results"  # default output location (examples/results/)
 PARSNIP_MODELS = ["plasticc", "plasticc_photoz", "ps1"]
 PARSNIP_OPTIONS = ["classifier"]
 SNN_OPTIONS = ["fink_exact", "detection_snr", "no_time_window", "fix_clipped_min"]
@@ -54,11 +55,13 @@ def parse_args():
         f"plasticc with --redshift-column); snn: {', '.join(sorted(hyrax_snn.PRETRAINED_MODELS))} "
         "(default elasticc_ia, or elasticc_broad with --redshift-column)",
     )
-    parser.add_argument("--output", help="Output table (.parquet/.ecsv; default <method>_predictions.parquet)")
+    parser.add_argument(
+        "--output", help="Output table (.parquet/.ecsv; default examples/results/<method>_predictions.parquet)"
+    )
     parser.add_argument("--redshift-column", help="Per-object redshift column to use as model input")
     parser.add_argument("--mwebv-column", help="Per-object Milky Way E(B-V) column (default: no correction)")
     parser.add_argument("--batch-size", type=int, default=256)
-    parser.add_argument("--results-dir", default="./results")
+    parser.add_argument("--results-dir", default=str(RESULTS / "hyrax"), help="Hyrax run directory")
 
     parsnip_group = parser.add_argument_group("parsnip only")
     parsnip_group.add_argument("--classifier", help="Saved parsnip.Classifier to apply (see train_classifier)")
@@ -90,7 +93,7 @@ def parse_args():
         parser.error(f"--model {args.model!r} is not a ParSNIP model ({', '.join(PARSNIP_MODELS)} or a .pt file)")
     elif args.method == "snn" and args.model not in hyrax_snn.PRETRAINED_MODELS:
         parser.error(f"--model {args.model!r} is not a SuperNNova model ({', '.join(sorted(hyrax_snn.PRETRAINED_MODELS))})")
-    args.output = args.output or f"{args.method}_predictions.parquet"
+    args.output = args.output or str(RESULTS / f"{args.method}_predictions.parquet")
     return args
 
 
@@ -225,6 +228,7 @@ def main():
     if (classified != "").any():
         names, counts = np.unique(classified[classified != ""], return_counts=True)
         print(f"{args.method}/{args.model} predicted classes:", dict(zip(names.tolist(), counts.tolist())))
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     predictions.write(args.output, overwrite=True)
     print(f"Wrote {args.output}")
 

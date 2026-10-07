@@ -18,4 +18,4 @@ if [ ! -d data/plasticc_hats ]; then
     .venv/bin/python examples/plasticc_to_hats.py data/plasticc_hats --ddf
 fi
 .venv/bin/python examples/parsnip_train_classifier.py data/plasticc_hats \
-    --output examples/models/plasticc_classifier.pkl --results-dir results/train_parsnip_classifier "$@"
+    --output examples/models/plasticc_classifier.pkl --results-dir examples/results/train_parsnip_classifier "$@"

@@ -9,13 +9,13 @@
 # Classify the real EDP2 DIA catalog (no labels, no redshifts) with both models, without redshift.
 # Submit from the repo root:
 #   sbatch -A <account> -q <qos> nersc/classify_edp2.sbatch [CATALOG=<EDP2 default>] [CLASSIFIER=examples/models/plasticc_classifier.pkl]
-# Outputs in results/edp2/.
+# Outputs in examples/results/edp2/.
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 CATALOG=${1:-/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats}
 CLASSIFIER=${2:-examples/models/plasticc_classifier.pkl}
-OUT=results/edp2
+OUT=examples/results/edp2
 mkdir -p "$OUT"
 
 if [ -f "$CLASSIFIER" ]; then

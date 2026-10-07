@@ -29,7 +29,7 @@ Scoring depends on the classes:
 `evaluate()` makes the same figures from Python (e.g. the demo notebook): join an in-memory
 predictions table with `prepare(predictions, load_truth(catalog)[1])` first.
 
-Saves, in DIR:
+Saves, in DIR (default ``examples/results/eval_<PREDICTIONS name>/``):
 - ``sample.png``: true redshift and number of detections per type
 - ``lightcurves.png``: typical light curves of each type, with the predicted class
 - ``confusion.png`` (matched) or ``predicted.png`` (target): predicted class per true type
@@ -514,7 +514,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("catalog", help="Simulated HATS catalog (from simulate_dp2.py)")
     parser.add_argument("predictions", help="Predictions table (from classify_rubin_dia.py)")
-    parser.add_argument("--output-dir", default="evaluation")
+    parser.add_argument("--output-dir", help="Figures (default examples/results/eval_<PREDICTIONS name>/)")
     parser.add_argument("--threshold", type=float, default=0.5, help="Threshold on P(target) (target mode)")
     kfold = parser.add_argument_group("ParSNIP K-fold LightGBM (trains on CATALOG)")
     kfold.add_argument("--kfold-lightgbm", action="store_true", help="Train ParSNIP's classifier on CATALOG with K-folding")
@@ -525,8 +525,9 @@ def main():
     if args.binary_class and not args.kfold_lightgbm:
         parser.error("--binary-class is only used with --kfold-lightgbm")
 
+    output_dir = args.output_dir or Path(__file__).resolve().parent / "results" / f"eval_{Path(args.predictions).stem}"
     frame, table, classes = load(args.catalog, args.predictions, args)
-    evaluate(frame, table, classes, args.output_dir, args.threshold, args.binary_class)
+    evaluate(frame, table, classes, output_dir, args.threshold, args.binary_class)
 
 
 if __name__ == "__main__":

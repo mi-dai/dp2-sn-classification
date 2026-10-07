@@ -9,14 +9,14 @@
 # Classify the DP2 validation simulation with both models and score them against the truth.
 # Submit from the repo root:
 #   sbatch -A <account> -q <qos> nersc/validate.sbatch [CATALOG=data/dp2_sim_sne] [CLASSIFIER=examples/models/plasticc_classifier.pkl]
-# Outputs in results/validate/: predictions (*.parquet) and figures (eval_*/).
+# Outputs in examples/results/validate/: predictions (*.parquet) and figures (eval_*/).
 # ParSNIP is skipped if the classifier doesn't exist (run train_parsnip_classifier.sbatch first).
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 CATALOG=${1:-data/dp2_sim_sne}
 CLASSIFIER=${2:-examples/models/plasticc_classifier.pkl}
-OUT=results/validate
+OUT=examples/results/validate
 mkdir -p "$OUT"
 run() { .venv/bin/python examples/classify_rubin_dia.py "$CATALOG" --results-dir "$OUT/hyrax" "$@"; }
 evaluate() { .venv/bin/python examples/evaluate.py "$CATALOG" "$OUT/$1.parquet" --output-dir "$OUT/eval_$1"; }

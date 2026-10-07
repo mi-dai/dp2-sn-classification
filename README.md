@@ -30,11 +30,11 @@ python examples/simulate_dp2.py data/dp2_sim_sne
 python examples/plasticc_to_hats.py data/plasticc_hats --ddf
 python examples/parsnip_train_classifier.py data/plasticc_hats   # writes examples/models/plasticc_classifier.{pkl,json}
 python examples/classify_rubin_dia.py data/dp2_sim_sne --method parsnip --classifier examples/models/plasticc_classifier.pkl
-python examples/evaluate.py data/dp2_sim_sne parsnip_predictions.parquet --output-dir eval_parsnip
+python examples/evaluate.py data/dp2_sim_sne examples/results/parsnip_predictions.parquet
 
 # SuperNNova: pretrained, classify and score
 python examples/classify_rubin_dia.py data/dp2_sim_sne --method snn
-python examples/evaluate.py data/dp2_sim_sne snn_predictions.parquet --output-dir eval_snn
+python examples/evaluate.py data/dp2_sim_sne examples/results/snn_predictions.parquet
 
 # Real data: classify_rubin_dia.py defaults to the EDP2 catalog
 python examples/classify_rubin_dia.py --method parsnip --classifier examples/models/plasticc_classifier.pkl
@@ -45,6 +45,10 @@ python examples/classify_rubin_dia.py --method snn
 `classify_rubin_dia.py` writes one table for either method: `diaObjectId`, `method`, `model`,
 `redshift_input`, `p_<class>` and `predicted_class` (plus ParSNIP's features). `evaluate.py` scores it
 against the simulation truth and warns when the model was given the redshift.
+
+Outputs go under `examples/` whatever the working directory: trained classifiers in `examples/models/`,
+predictions, figures and Hyrax runs in `examples/results/` (e.g. `examples/results/snn_predictions.parquet`,
+`examples/results/eval_snn_predictions/`). Data (simulation, PLAsTiCC) stay in `data/`. All are git-ignored.
 
 ## Install
 
