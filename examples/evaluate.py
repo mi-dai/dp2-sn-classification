@@ -32,7 +32,9 @@ predictions table with `prepare(predictions, load_truth(catalog)[1])` first.
 Saves, in DIR (default ``examples/results/eval_<PREDICTIONS name>/``):
 - ``sample.png``: true redshift and number of detections per type
 - ``lightcurves.png``: typical light curves of each type, with the predicted class
-- ``confusion.png`` (matched) or ``predicted.png`` (target): predicted class per true type
+- ``confusion.png``: SN Ia vs non-Ia confusion matrix (true SNIa vs any other type, predicted
+  P(SNIa) ≥ threshold) for models with an SNIa class; otherwise predicted class per true type
+  (``confusion.png`` when the classes are the true types, ``predicted.png`` when not)
 - ``recall.png``: fraction correct (matched) or with P(target) ≥ threshold (target), vs
   light-curve S/N and true redshift, per type
 - ``probability.png``: P(target) per true type (target mode)
@@ -248,34 +250,55 @@ def plot_lightcurves(frame, table, types, matched, path, per_class=4, seed=0):
     plt.close(fig)
 
 
-def plot_class_matrix(table, types, classes, matched, path, note=""):
-    """Rows: true type; columns: predicted class; rows normalized."""
-    t = table[table["predicted_class"] != ""]
-    counts = pd.crosstab(t["type"], t["predicted_class"]).reindex(index=types, columns=classes, fill_value=0)
+def draw_matrix(counts: pd.DataFrame, title, path, xlabel="predicted", ylabel="true"):
+    """Counts with rows normalized (fraction and count in each cell)."""
     frac = counts.to_numpy() / np.maximum(counts.to_numpy().sum(axis=1, keepdims=True), 1)
-
-    fig, ax = plt.subplots(figsize=(max(4.6, 1.1 * len(classes) + 2.2), max(4, 0.6 * len(types) + 1.8)))
+    n_rows, n_cols = counts.shape
+    fig, ax = plt.subplots(figsize=(max(4.6, 1.1 * n_cols + 2.2), max(4, 0.6 * n_rows + 1.8)))
     ax.imshow(frac, cmap=SEQUENTIAL, vmin=0, vmax=1, aspect="auto")
     ax.grid(False)
-    for i in range(len(types)):
-        for j in range(len(classes)):
+    for i in range(n_rows):
+        for j in range(n_cols):
             ax.text(
                 j, i, f"{frac[i, j]:.2f}\n({counts.iat[i, j]})", ha="center", va="center", fontsize=9,
                 color="white" if frac[i, j] > 0.55 else "#1a1a1a",
             )
-    ax.set_xticks(range(len(classes)), classes)
-    ax.set_yticks(range(len(types)), types)
-    ax.set(xlabel="predicted", ylabel="true")
-    if matched:
-        accuracy = (t["type"] == t["predicted_class"]).mean()
-        ax.set_title(f"Accuracy {accuracy:.3f} ({len(t)} objects){note}\nrows normalized")
-    else:
-        ax.set_title(f"Predicted class per true type ({len(t)} objects){note}\nrows normalized")
+    ax.set_xticks(range(n_cols), counts.columns)
+    ax.set_yticks(range(n_rows), counts.index)
+    ax.set(xlabel=xlabel, ylabel=ylabel, title=title)
     for spine in ax.spines.values():
         spine.set_visible(False)
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)
+
+
+def plot_ia_confusion(table, threshold, path, note=""):
+    """SN Ia vs non-Ia confusion matrix: true SNIa vs any other type, predicted P(SNIa) >= threshold."""
+    t = table[table["predicted_class"] != ""]
+    labels = ["SNIa", "non-SNIa"]
+    true = np.where(t["type"] == "SNIa", "SNIa", "non-SNIa")
+    predicted = np.where(t["p_SNIa"] >= threshold, "SNIa", "non-SNIa")
+    counts = pd.crosstab(pd.Series(true, name="true"), pd.Series(predicted, name="predicted"))
+    counts = counts.reindex(index=labels, columns=labels, fill_value=0)
+    accuracy = (true == predicted).mean()
+    draw_matrix(
+        counts, f"SN Ia vs non-Ia: accuracy {accuracy:.3f} ({len(t)} objects){note}\nrows normalized", path,
+        xlabel=f"predicted (P(SNIa) ≥ {threshold})",
+    )
+    return accuracy
+
+
+def plot_class_matrix(table, types, classes, matched, path, note=""):
+    """Rows: true type; columns: predicted class; rows normalized."""
+    t = table[table["predicted_class"] != ""]
+    counts = pd.crosstab(t["type"], t["predicted_class"]).reindex(index=types, columns=classes, fill_value=0)
+    if matched:
+        accuracy = (t["type"] == t["predicted_class"]).mean()
+        title = f"Accuracy {accuracy:.3f} ({len(t)} objects){note}\nrows normalized"
+    else:
+        title = f"Predicted class per true type ({len(t)} objects){note}\nrows normalized"
+    draw_matrix(counts, title, path)
 
 
 def binned_fraction(x, flag, bins, min_count=10):
@@ -455,10 +478,17 @@ def evaluate(frame, table, classes, out_dir, threshold=0.5, binary_class=None):
         figures.append(path)
         return result
 
+    def save_matrix(matched):
+        """SN Ia vs non-Ia confusion matrix when SNIa is a class, otherwise predicted class per true type."""
+        if "SNIa" in classes:
+            metrics["ia_accuracy"] = float(save(plot_ia_confusion, "confusion.png", table, threshold, note=note))
+        else:
+            save(plot_class_matrix, "confusion.png" if matched else "predicted.png", table, types, classes, matched, note=note)
+
     save(plot_sample, "sample.png", table, types)
     save(plot_lightcurves, "lightcurves.png", frame, table, types, matched)
     if matched:
-        save(plot_class_matrix, "confusion.png", table, types, classes, True, note=note)
+        save_matrix(True)
         correct = (table["type"] == table["predicted_class"]).to_numpy()
         save(
             plot_recall, "recall.png", table, types, correct, "recall (fraction correct)",
@@ -473,7 +503,7 @@ def evaluate(frame, table, classes, out_dir, threshold=0.5, binary_class=None):
         target = binary_class if binary_class else None
     else:
         target = choose_target(classes)
-        save(plot_class_matrix, "predicted.png", table, types, classes, False, note=note)
+        save_matrix(False)
         save(plot_probability, "probability.png", table, target, types)
         selected = (table[f"p_{target}"] >= threshold).to_numpy()
         save(
