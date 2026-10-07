@@ -28,13 +28,13 @@ Submit from the repo root, passing the user's account and QOS (not stored in the
 | job | does | outputs |
 |---|---|---|
 | `simulate_dp2.sbatch [OUT] [N_PER_CLASS]` | DP2 validation simulation (SN Ia/II/Ib/c, DP2 DIA schema + truth) | `data/dp2_sim_sne` |
-| `train_parsnip_classifier.sbatch` | PLAsTiCC (train + test DDF, 40,774 objects) → ParSNIP features → LightGBM (SNIa vs non-SNIa) | `plasticc_classifier.{pkl,json}` |
+| `train_parsnip_classifier.sbatch` | PLAsTiCC (train + test DDF, 40,774 objects) → ParSNIP features → LightGBM (SNIa vs non-SNIa) | `examples/models/plasticc_classifier.{pkl,json}` |
 | `validate.sbatch [CATALOG] [CLASSIFIER]` | both models on the simulation + `evaluate.py` | `results/validate/` |
 | `classify_edp2.sbatch [CATALOG] [CLASSIFIER]` | both models on the real EDP2 catalog, no redshift | `results/edp2/` |
 
 Short checks can run interactively on a login node; anything long goes through Slurm. The demo notebook
 `examples/demo_workflow.ipynb` (kernel `dp2-sn-classification (td_env)`) uses the same `data/` paths and the
-classifier in the repo root. If the classifier is missing it trains it in the notebook (training set + DDF,
+classifier in `examples/models/`. If the classifier is missing it trains it in the notebook (training set + DDF,
 ~35 min; `DEMO_PLASTICC_DDF=0` for the training set only); running `train_parsnip_classifier.sbatch` first avoids that.
 `data/plasticc_hats` is always training set + DDF; `data/plasticc_hats_train` is the training set only.
 
@@ -42,7 +42,8 @@ classifier in the repo root. If the classifier is missing it trains it in the no
 - Real target (unlabeled, no redshifts): `/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats`.
 - DP2 inputs for the simulation (`examples/simulate_dp2.py`): the DP2 visit-detector table and DIA catalog under
   `/global/cfs/cdirs/lsst/shared/rubin/DP2/HATS/`.
-- Generated data (`data/`), results (`results/`), logs, classifiers and root-level `.parquet` files are git-ignored.
+- Generated data (`data/`), results (`results/`), logs, classifiers (`examples/models/`) and root-level `.parquet`
+  files are git-ignored.
 
 ## Decisions to respect
 - The DP2 simulation is for **validation only**: don't train on it (`evaluate.py --kfold-lightgbm` is a quick

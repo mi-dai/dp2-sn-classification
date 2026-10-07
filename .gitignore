@@ -8,6 +8,6 @@ data/
 *.pth
 *.pkl
 nersc/logs/
-# Classifier and prediction outputs written to the repo root by the examples and nersc/ jobs
-/plasticc_classifier*
+# Trained classifiers (parsnip_train_classifier.py) and prediction outputs written to the repo root
+examples/models/
 /*.parquet

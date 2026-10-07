@@ -1,11 +1,11 @@
 """Train ParSNIP's LightGBM classifier on a labeled catalog (default: PLAsTiCC).
 
     python examples/parsnip_train_classifier.py [data/plasticc_hats] \\
-        [--output plasticc_classifier.pkl] [--classes {ia,dp2,all}] [--redshift-column redshift]
+        [--output examples/models/plasticc_classifier.pkl] [--classes {ia,dp2,all}] [--redshift-column redshift]
 
 Runs a pretrained ParSNIP model over a labeled HATS catalog (e.g. from
 ``plasticc_to_hats.py``), trains ``parsnip.Classifier`` on the features with K-folding,
-prints the K-fold (out-of-sample) performance, and writes:
+prints the K-fold (out-of-sample) performance, and writes (by default in ``examples/models/``):
 
 - ``<output>.pkl``: the classifier, for ``classify_rubin_dia.py --method parsnip --classifier``
 - ``<output>.json``: how its features were made (ParSNIP model, whether the model was given
@@ -34,6 +34,7 @@ from hyrax import Hyrax
 import hyrax_parsnip
 
 DP2_CLASSES = ["SNIa", "SNII", "SNIbc"]
+DEFAULT_OUTPUT = Path(__file__).resolve().parent / "models" / "plasticc_classifier.pkl"
 
 
 def class_labels(types, scheme: str) -> np.ndarray:
@@ -49,7 +50,7 @@ def class_labels(types, scheme: str) -> np.ndarray:
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("catalog", nargs="?", default="data/plasticc_hats", help="Labeled HATS catalog")
-    parser.add_argument("--output", default="plasticc_classifier.pkl", help="Classifier file (.pkl)")
+    parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Classifier file (.pkl; default examples/models/plasticc_classifier.pkl)")
     parser.add_argument("--model", help="ParSNIP model (default plasticc_photoz, or plasticc with --redshift-column)")
     parser.add_argument("--redshift-column", help="Per-object redshift column to give the model (e.g. redshift)")
     parser.add_argument("--mwebv-column", default="mwebv", help="Milky Way E(B-V) column ('' for none)")
@@ -68,6 +69,7 @@ def main():
     output = Path(args.output).resolve()
     if output.suffix != ".pkl":
         parser.error("--output must end in .pkl")
+    output.parent.mkdir(parents=True, exist_ok=True)
 
     h = Hyrax()
     h.set_config("general.results_dir", args.results_dir)

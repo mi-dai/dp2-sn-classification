@@ -28,8 +28,8 @@ python examples/simulate_dp2.py data/dp2_sim_sne
 
 # ParSNIP: train its classifier on PLAsTiCC once, then classify and score
 python examples/plasticc_to_hats.py data/plasticc_hats --ddf
-python examples/parsnip_train_classifier.py data/plasticc_hats --output plasticc_classifier.pkl
-python examples/classify_rubin_dia.py data/dp2_sim_sne --method parsnip --classifier plasticc_classifier.pkl
+python examples/parsnip_train_classifier.py data/plasticc_hats   # writes examples/models/plasticc_classifier.{pkl,json}
+python examples/classify_rubin_dia.py data/dp2_sim_sne --method parsnip --classifier examples/models/plasticc_classifier.pkl
 python examples/evaluate.py data/dp2_sim_sne parsnip_predictions.parquet --output-dir eval_parsnip
 
 # SuperNNova: pretrained, classify and score
@@ -37,7 +37,7 @@ python examples/classify_rubin_dia.py data/dp2_sim_sne --method snn
 python examples/evaluate.py data/dp2_sim_sne snn_predictions.parquet --output-dir eval_snn
 
 # Real data: classify_rubin_dia.py defaults to the EDP2 catalog
-python examples/classify_rubin_dia.py --method parsnip --classifier plasticc_classifier.pkl
+python examples/classify_rubin_dia.py --method parsnip --classifier examples/models/plasticc_classifier.pkl
 python examples/classify_rubin_dia.py --method snn
 ```
 
@@ -277,7 +277,7 @@ Shared by both classifiers:
   `--kfold-lightgbm` trains ParSNIP's classifier on the catalog instead, as a quick check only.
 - `examples/demo_workflow.ipynb`: the workflow for both models on the DP2 simulation, with SN Ia vs rest side
   by side. It loads `data/dp2_sim_sne` if it exists and simulates otherwise, and trains the PLAsTiCC
-  classifier if `plasticc_classifier.pkl` doesn't exist yet (training set + DDF, ~35 min; `DEMO_PLASTICC_DDF=0`
+  classifier if `examples/models/plasticc_classifier.pkl` doesn't exist yet (training set + DDF, ~35 min; `DEMO_PLASTICC_DDF=0`
   for the training set only, ~7 min). `DEMO_CATALOG` / `DEMO_CLASSIFIER` override the paths. Needs the `notebook`
   extra (and lightcurvelynx to simulate).
 - `examples/simulate_dp2.py`: the DP2 validation simulation, e.g.
