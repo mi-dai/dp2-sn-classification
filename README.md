@@ -46,7 +46,7 @@ python examples/classify_rubin_dia.py --method snn
 ```
 
 `examples/demo_workflow.ipynb` walks through the same steps interactively and compares both models.
-`classify_rubin_dia.py` writes one table for either method: `diaObjectId`, `method`, `model`,
+`classify_rubin_dia.py` writes one table for either method: `diaObjectId`, `ra`, `dec`, `method`, `model`,
 `redshift_input`, `p_<class>` and `predicted_class` (plus ParSNIP's features). `evaluate.py` scores it
 against the simulation truth and warns when the model was given the redshift.
 

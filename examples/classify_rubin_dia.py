@@ -26,7 +26,7 @@ observations, and runs a pretrained model:
   NonPeriodic). Models are downloaded on first use (run once on a NERSC login node).
   ``--fink-exact`` approximates Fink's own input processing, for comparison.
 
-The output has one row per ``diaObjectId`` with ``method``, ``model``, ``redshift_input``
+The output has one row per ``diaObjectId`` with ``ra``, ``dec``, ``method``, ``model``, ``redshift_input``
 (whether the model was given each object's redshift), ``p_<class>``
 probabilities and ``predicted_class`` ("" if not classified); for ParSNIP also its features
 (and ``predicted_redshift`` for photo-z models). ``evaluate.py`` reads it.
@@ -244,13 +244,19 @@ def main():
     args = parse_args()
     predictions, redshift_input = run_parsnip(args) if args.method == "parsnip" else run_snn(args)
 
+    # Sky position of each object, from the catalog.
+    coords = hyrax_parsnip.catalog_metadata(args.catalog, ["ra", "dec"], id_column="diaObjectId")
+    row = {object_id: i for i, object_id in enumerate(np.asarray(coords["object_id"]))}
+    index = np.array([row[object_id] for object_id in np.asarray(predictions["object_id"])], dtype=int)
     predictions.rename_column("object_id", "diaObjectId")
     # Hyrax keeps ids as strings; Rubin diaObjectIds are int64.
     predictions["diaObjectId"] = np.asarray(predictions["diaObjectId"], dtype=np.int64)
-    predictions.add_column(np.full(len(predictions), args.method), name="method", index=1)
-    predictions.add_column(np.full(len(predictions), args.model), name="model", index=2)
+    predictions.add_column(np.asarray(coords["ra"], dtype=np.float64)[index], name="ra", index=1)
+    predictions.add_column(np.asarray(coords["dec"], dtype=np.float64)[index], name="dec", index=2)
+    predictions.add_column(np.full(len(predictions), args.method), name="method", index=3)
+    predictions.add_column(np.full(len(predictions), args.model), name="model", index=4)
     # Whether the model was given each object's redshift (e.g. the true redshift of simulations).
-    predictions.add_column(np.full(len(predictions), redshift_input), name="redshift_input", index=3)
+    predictions.add_column(np.full(len(predictions), redshift_input), name="redshift_input", index=5)
     if args.method == "parsnip":
         predictions["classifier"] = Path(args.classifier).name if args.classifier else ""
     if redshift_input:
