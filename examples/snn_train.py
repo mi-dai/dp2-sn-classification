@@ -33,7 +33,7 @@ import torch
 from hyrax import Hyrax
 
 import hyrax_snn
-from hyrax_parsnip.labels import SCHEMES
+from hyrax_lightcurves.labels import SCHEMES
 from hyrax_snn.config import SNN_BAND_MAP
 from hyrax_snn.pretrained import load_settings
 from hyrax_snn.training import find_checkpoint, training_dataset

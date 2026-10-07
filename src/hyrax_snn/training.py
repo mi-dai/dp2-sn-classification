@@ -13,8 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-from hyrax_parsnip import ParsnipHATSDataset
-from hyrax_parsnip.config import DATASET_CLASS
+from hyrax_lightcurves import DATASET_CLASS, LightCurveHATSDataset
 from hyrax_snn.config import MODEL_NAME, SNN_BAND_MAP
 from hyrax_snn.features import build_features, select_observations
 from hyrax_snn.pretrained import load_settings
@@ -22,18 +21,18 @@ from hyrax_snn.pretrained import load_settings
 HOST_FEATURES = ["HOSTGAL_PHOTOZ", "HOSTGAL_PHOTOZ_ERR", "HOSTGAL_SPECZ", "HOSTGAL_SPECZ_ERR"]
 
 
-def training_dataset(h, catalog_path, dataset_settings: dict, redshift: str = "none") -> ParsnipHATSDataset:
+def training_dataset(h, catalog_path, dataset_settings: dict, redshift: str = "none") -> LightCurveHATSDataset:
     """The labeled catalog as `new_model_dir` reads it, with the SuperNNova band map and
     `dataset_settings` (which need ``label_column``; ``label_scheme`` maps the types to classes).
     Also merges hyrax_snn's default config into `h`; `hyrax_snn.configure` sets the rest."""
     h.set_config("model.name", MODEL_NAME)
-    # Referencing the dataset class merges hyrax_parsnip's dataset defaults.
+    # Referencing the dataset class merges hyrax_lightcurves' dataset defaults.
     data = {"dataset_class": DATASET_CLASS, "data_location": str(catalog_path), "primary_id_field": "object_id"}
     h.set_config("data_request", {"train": {"data": data}})
     for key, value in {"band_map": SNN_BAND_MAP, **dataset_settings}.items():
-        h.set_config(f"data_set.ParsnipHATSDataset.{key}", value)
-    h.set_config("data_set.ParsnipHATSDataset.require_redshift", redshift == "zspe")
-    return ParsnipHATSDataset(h.config, data_location=str(catalog_path))
+        h.set_config(f"data_set.LightCurveHATSDataset.{key}", value)
+    h.set_config("data_set.LightCurveHATSDataset.require_redshift", redshift == "zspe")
+    return LightCurveHATSDataset(h.config, data_location=str(catalog_path))
 
 
 def find_checkpoint(resume, results_dir) -> Path:
@@ -112,7 +111,7 @@ def new_model_dir(
     ----------
     path : str or Path
         New model directory.
-    dataset : ParsnipHATSDataset
+    dataset : LightCurveHATSDataset
         Labeled training data (``label_column`` set); its classes become the model's classes.
     band_names : list of str
         SuperNNova filter name of each dataset band index (the ``band_map`` values).

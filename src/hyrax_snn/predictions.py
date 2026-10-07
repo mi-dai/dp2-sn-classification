@@ -15,7 +15,7 @@ def load_predictions(results, metadata: Table | None = None) -> Table:
     results : hyrax ResultDataset
         The return value of ``h.infer()``.
     metadata : astropy Table, optional
-        Extra per-object columns (e.g. from `hyrax_parsnip.catalog_metadata`) joined on
+        Extra per-object columns (e.g. from `hyrax_lightcurves.catalog_metadata`) joined on
         ``object_id``.
 
     Returns

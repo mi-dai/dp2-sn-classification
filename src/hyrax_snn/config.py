@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from hyrax_parsnip.config import DATASET_CLASS, MODEL_FIELDS, NJY_TO_ZP27_5
-from hyrax_parsnip.config import RUBIN_DIA_SETTINGS as PARSNIP_RUBIN_DIA_SETTINGS
+from hyrax_lightcurves.config import DATASET_CLASS, MODEL_FIELDS, NJY_TO_ZP27_5
+from hyrax_lightcurves.config import RUBIN_DIA_SETTINGS as LIGHTCURVE_RUBIN_DIA_SETTINGS
 from hyrax_snn.pretrained import resolve
 
 MODEL_NAME = "hyrax_snn.model.HyraxSNN"
@@ -9,12 +9,12 @@ MODEL_NAME = "hyrax_snn.model.HyraxSNN"
 # SuperNNova's LSST filter names; Rubin catalogs use "y".
 SNN_BAND_MAP = {"u": "u", "g": "g", "r": "r", "i": "i", "z": "z", "y": "Y"}
 
-# `[data_set.ParsnipHATSDataset]` settings for Rubin DIA catalogs with SuperNNova: the same
-# columns and flags as for ParSNIP, but fluxes stay in nJy. The Fink ELAsTiCC models
+# `[data_set.LightCurveHATSDataset]` settings for Rubin DIA catalogs with SuperNNova: the
+# Rubin DIA columns and flags, with fluxes kept in nJy. The Fink ELAsTiCC models
 # were trained on the alert stream (nJy) and, in our tests, separate SN Ia much better
 # with nJy input than with Fink's zp-27.5 conversion. Models with `cosmo_quantile`
 # normalization rescale each light curve and don't depend on the units.
-RUBIN_DIA_SETTINGS = {**PARSNIP_RUBIN_DIA_SETTINGS, "flux_scale": 1.0, "band_map": SNN_BAND_MAP}
+RUBIN_DIA_SETTINGS = {**LIGHTCURVE_RUBIN_DIA_SETTINGS, "flux_scale": 1.0, "band_map": SNN_BAND_MAP}
 
 # Model settings that approximate Fink's own Rubin processor (fink_science/rubin/snn):
 # alert detections only (S/N > 5 stands in for diaSource + prvDiaSources), no time
@@ -46,7 +46,7 @@ def configure(
         data_request groups to create; "train" / "validate" also request ``label_index``
         (set ``label_column`` and ``label_scheme`` in `dataset_settings`).
     dataset_settings : dict, optional
-        `[data_set.ParsnipHATSDataset]` overrides, e.g. `RUBIN_DIA_SETTINGS` plus a
+        `[data_set.LightCurveHATSDataset]` overrides, e.g. `RUBIN_DIA_SETTINGS` plus a
         `redshift_column`. They are applied after the SuperNNova band map.
     """
     # Setting model.name first makes Hyrax merge hyrax_snn/default_config.toml.
@@ -66,14 +66,14 @@ def configure(
         for group in groups
     }
     h.set_config("data_request", data_request)
-    h.set_config("data_set.ParsnipHATSDataset.band_map", SNN_BAND_MAP)
+    h.set_config("data_set.LightCurveHATSDataset.band_map", SNN_BAND_MAP)
     for key, value in (dataset_settings or {}).items():
-        h.set_config(f"data_set.ParsnipHATSDataset.{key}", value)
+        h.set_config(f"data_set.LightCurveHATSDataset.{key}", value)
 
     settings = h.config["model"]["HyraxSNN"]
     snn = resolve(str(pretrained), cache_dir=settings["cache_dir"] or None)
     # Models that take a redshift input need one per object; the others don't.
-    h.set_config("data_set.ParsnipHATSDataset.require_redshift", snn.redshift != "none")
+    h.set_config("data_set.LightCurveHATSDataset.require_redshift", snn.redshift != "none")
     # A new model (no model.pt yet) is trained first; inference then uses the latest training run.
     weights = snn.model_dir / "model.pt"
     h.set_config("infer.model_weights_file", str(weights) if weights.exists() else False)

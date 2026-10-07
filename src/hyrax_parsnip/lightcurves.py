@@ -10,7 +10,7 @@ def batch_to_tables(lightcurve, lengths, time_offset, redshift, mwebv, band_name
     Parameters
     ----------
     lightcurve : array-like, shape (batch, max_len, 4)
-        Padded ``[time, flux, fluxerr, band_index]`` rows (see ``ParsnipHATSDataset``).
+        Padded ``[time, flux, fluxerr, band_index]`` rows (see ``hyrax_lightcurves.LightCurveHATSDataset``).
     lengths : array-like, shape (batch,)
         Number of real (unpadded) observations per object.
     time_offset : array-like, shape (batch,)

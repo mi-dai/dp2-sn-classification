@@ -1,36 +1,17 @@
 from pathlib import Path
 
+from hyrax_lightcurves.config import DATASET_CLASS, MODEL_FIELDS, NJY_TO_ZP27_5
+from hyrax_lightcurves.config import RUBIN_DIA_SETTINGS as LIGHTCURVE_RUBIN_DIA_SETTINGS
 from hyrax_parsnip.model import pretrained_model_path
 
 MODEL_NAME = "hyrax_parsnip.model.HyraxParsnip"
-DATASET_CLASS = "hyrax_parsnip.dataset.ParsnipHATSDataset"
 
-# Dataset fields the model consumes; see HyraxParsnip.prepare_inputs.
-MODEL_FIELDS = ["lightcurve", "redshift", "mwebv", "photoz"]
+# Catalog band -> sncosmo band understood by the ParSNIP models (set by `configure`).
+PARSNIP_BAND_MAP = {"u": "lsstu", "g": "lsstg", "r": "lsstr", "i": "lssti", "z": "lsstz", "y": "lssty"}
 
-# Rubin fluxes are in nJy (AB zeropoint 31.4); the PLAsTiCC models use zeropoint 27.5.
-NJY_TO_ZP27_5 = 10 ** (-0.4 * (31.4 - 27.5))
-
-# `[data_set.ParsnipHATSDataset]` settings for Rubin DIA catalogs: forced photometry on
-# difference images (`diaObjectForcedSource`), with flagged observations dropped.
-RUBIN_DIA_SETTINGS = {
-    "id_column": "diaObjectId",
-    "redshift_column": False,
-    "lightcurve_column": "diaObjectForcedSource",
-    "time_column": "midpointMjdTai",
-    "flux_column": "psfDiffFlux",
-    "fluxerr_column": "psfDiffFluxErr",
-    "band_column": "band",
-    "flux_scale": NJY_TO_ZP27_5,
-    "flag_columns": [
-        "psfDiffFlux_flag",
-        "invalidPsfFlag",
-        "pixelFlags_saturatedCenter",
-        "pixelFlags_crCenter",
-        "pixelFlags_nodata",
-        "diff_PixelFlags_nodataCenter",
-    ],
-}
+# `[data_set.LightCurveHATSDataset]` settings for Rubin DIA catalogs with ParSNIP: the Rubin DIA
+# columns and flags, with fluxes rescaled from nJy to the PLAsTiCC zeropoint (27.5).
+RUBIN_DIA_SETTINGS = {**LIGHTCURVE_RUBIN_DIA_SETTINGS, "flux_scale": NJY_TO_ZP27_5}
 
 
 def configure(
@@ -75,9 +56,10 @@ def configure(
         for group in groups
     }
     h.set_config("data_request", data_request)
+    h.set_config("data_set.LightCurveHATSDataset.band_map", PARSNIP_BAND_MAP)
 
     # Models that predict redshift can run on objects without one.
-    h.set_config("data_set.ParsnipHATSDataset.require_redshift", not _predicts_redshift(h, pretrained))
+    h.set_config("data_set.LightCurveHATSDataset.require_redshift", not _predicts_redshift(h, pretrained))
 
     if model_weights_file is None and pretrained:
         model_weights_file = pretrained_model_path(str(pretrained))

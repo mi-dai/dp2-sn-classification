@@ -8,7 +8,6 @@ import torch.nn as nn
 from hyrax.models import hyrax_model
 from hyrax.models.model_registry import _torch_save
 
-from hyrax_parsnip.model import HyraxParsnip
 from hyrax_snn.features import build_features, select_observations
 from hyrax_snn.pretrained import resolve
 from hyrax_snn.rnn import VanillaRNN
@@ -90,17 +89,18 @@ class HyraxSNN(nn.Module):
 
     @staticmethod
     def prepare_inputs(data_dict):
-        """HyraxParsnip's ``(lightcurve, lengths, time_offset, redshift, mwebv)`` plus the class
-        index (``label_index``, -1 when the dataset has no labels, e.g. for inference)."""
+        """The shared ``(lightcurve, lengths, time_offset, redshift, mwebv)`` (see
+        `hyrax_lightcurves.inputs.prepare_inputs`) plus the class index (``label_index``, -1
+        when the dataset has no labels, e.g. for inference)."""
         import numpy as np
 
-        from hyrax_parsnip.model import HyraxParsnip
+        from hyrax_lightcurves.inputs import prepare_inputs
 
-        inputs = HyraxParsnip.prepare_inputs(data_dict)
+        inputs = prepare_inputs(data_dict)
         data = data_dict["data"]
         n_objects = len(inputs[1])
         labels = np.asarray(data["label_index"], dtype=np.int64) if "label_index" in data else np.full(n_objects, -1)
-        return (*inputs[:5], labels)  # without ParSNIP's photoz
+        return (*inputs[:5], labels)  # without photoz (ParSNIP only)
 
     def __init__(self, config, data_sample=None):
         super().__init__()
@@ -112,7 +112,7 @@ class HyraxSNN(nn.Module):
             fix_clipped_min=bool(settings["fix_clipped_norm_min"]),
         )
         self.class_names = self.snn.class_names
-        self.band_names = np.array([str(b) for b in config["data_set"]["ParsnipHATSDataset"]["band_map"].values()])
+        self.band_names = np.array([str(b) for b in config["data_set"]["LightCurveHATSDataset"]["band_map"].values()])
         self.time_window = tuple(settings["time_window"]) if settings["time_window"] else None
         self.detection_snr = float(settings["detection_snr"]) if settings["detection_snr"] else None
         self.redshift_error = float(settings["redshift_error"])
@@ -121,7 +121,7 @@ class HyraxSNN(nn.Module):
         unknown = sorted(set(self.band_names) - set(self.snn.filters))
         if unknown:
             logger.warning(
-                f"Bands {unknown} from data_set.ParsnipHATSDataset.band_map are not used by the SuperNNova "
+                f"Bands {unknown} from data_set.LightCurveHATSDataset.band_map are not used by the SuperNNova "
                 f"model, which uses {self.snn.filters}; their observations are ignored."
             )
 

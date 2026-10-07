@@ -1,7 +1,8 @@
 # Notes for Claude Code
 
 Supernova classification of Rubin DP2 transients with ParSNIP (`src/hyrax_parsnip`) and SuperNNova
-(`src/hyrax_snn`) run through Hyrax on HATS catalogs. README.md has the full documentation.
+(`src/hyrax_snn`) run through Hyrax on HATS catalogs, both reading them with the shared dataset in
+`src/hyrax_lightcurves`. README.md has the full documentation.
 
 ## Where things happen
 - **Code is developed on the maintainer's Mac**, not here. On NERSC, Claude Code is used to set up the

@@ -108,7 +108,7 @@ class HyraxParsnip(nn.Module):
         super().__init__()
         self.config = config
         settings = config["model"]["HyraxParsnip"]
-        self.band_names = [str(b) for b in config["data_set"]["ParsnipHATSDataset"]["band_map"].values()]
+        self.band_names = [str(b) for b in config["data_set"]["LightCurveHATSDataset"]["band_map"].values()]
         self.augment_train = bool(settings["augment_train"])
         self.device_setting = str(settings["device"])
         self.photoz = float(settings["photoz"])
@@ -120,7 +120,7 @@ class HyraxParsnip(nn.Module):
         unknown = sorted(set(self.band_names) - set(self.parsnip.settings["bands"]))
         if unknown:
             raise ValueError(
-                f"Bands {unknown} from data_set.ParsnipHATSDataset.band_map are not supported by the "
+                f"Bands {unknown} from data_set.LightCurveHATSDataset.band_map are not supported by the "
                 f"ParSNIP model, which uses {list(self.parsnip.settings['bands'])}."
             )
 
@@ -153,37 +153,11 @@ class HyraxParsnip(nn.Module):
 
     @staticmethod
     def prepare_inputs(data_dict):
-        """Unpack the collated batch into float32 arrays
-        ``(lightcurve, lengths, time_offset, redshift, mwebv, photoz)``.
+        """``(lightcurve, lengths, time_offset, redshift, mwebv, photoz)``; see
+        `hyrax_lightcurves.inputs.prepare_inputs`."""
+        from hyrax_lightcurves.inputs import prepare_inputs
 
-        Hyrax may place inputs on devices without float64 support (e.g. MPS), so each
-        light curve's times are split into an integer-day ``time_offset`` (exact in
-        float32) and residuals with seconds-level precision over multi-year light curves.
-        """
-        import numpy as np
-
-        data = data_dict["data"]
-        lengths = np.asarray(data["lengths"], dtype=np.int64)
-        n_objects = len(lengths)
-        lightcurve = np.array(data["lightcurve"], dtype=np.float64)
-
-        time_offset = np.zeros(n_objects)
-        for i, n_obs in enumerate(lengths):
-            if n_obs:
-                time_offset[i] = np.floor(lightcurve[i, :n_obs, 0].min())
-                lightcurve[i, :n_obs, 0] -= time_offset[i]
-
-        redshift = np.asarray(data.get("redshift", np.full(n_objects, np.nan)))
-        mwebv = np.asarray(data.get("mwebv", np.zeros(n_objects)))
-        photoz = np.asarray(data.get("photoz", np.full(n_objects, np.nan)))
-        return (
-            lightcurve.astype(np.float32),
-            lengths,
-            time_offset.astype(np.float32),
-            redshift.astype(np.float32),
-            mwebv.astype(np.float32),
-            photoz.astype(np.float32),
-        )
+        return prepare_inputs(data_dict)
 
     def forward(self, batch):
         return self.infer_batch(batch)

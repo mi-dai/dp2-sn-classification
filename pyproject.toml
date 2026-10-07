@@ -30,6 +30,7 @@ sim = ["lightcurvelynx", "sncosmo", "dustmaps", "mocpy"]
 where = ["src"]
 
 [tool.setuptools.package-data]
+hyrax_lightcurves = ["*.toml"]
 hyrax_parsnip = ["*.toml"]
 hyrax_snn = ["*.toml"]
 

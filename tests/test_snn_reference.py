@@ -48,7 +48,7 @@ def patched_classify_lcs():
 @pytest.mark.parametrize("model", ["elasticc_ia", "SN_vs_other", "elasticc_broad"])
 def test_matches_supernnova(hyrax_instance, hats_catalog, model):
     import hyrax_snn
-    from hyrax_parsnip import ParsnipHATSDataset
+    from hyrax_lightcurves import LightCurveHATSDataset
 
     try:
         model_dir = hyrax_snn.pretrained_model_dir(model)
@@ -61,7 +61,7 @@ def test_matches_supernnova(hyrax_instance, hats_catalog, model):
     # SuperNNova's on-the-fly classification uses every observation as given.
     h.set_config("model.HyraxSNN.time_window", False)
     h.set_config("model.HyraxSNN.redshift_error", redshift_error)
-    dataset = ParsnipHATSDataset(h.config, data_location=hats_catalog)
+    dataset = LightCurveHATSDataset(h.config, data_location=hats_catalog)
     predictions = hyrax_snn.load_predictions(h.infer())
 
     # The same light curves for SuperNNova (the toy catalog has no MWEBV column, so 0).

@@ -11,7 +11,7 @@ With ``--ddf-only``, only visits within ``DDF_RADIUS_DEG`` of a Deep Drilling Fi
 used, so objects are simulated in the DDFs only.
 
 The output HATS catalog has the DP2 DIA schema, so it reads like real data with
-``hyrax_parsnip.RUBIN_DIA_SETTINGS``:
+``hyrax_lightcurves.RUBIN_DIA_SETTINGS`` (and each model package's version of it):
 
 - per object: ``diaObjectId``, ``ra``, ``dec``, ``nDiaSources``
 - nested ``diaObjectForcedSource``: ``midpointMjdTai``, ``band``, ``psfDiffFlux``,
@@ -61,7 +61,7 @@ from lightcurvelynx.survey_info import SurveyInfo
 from lightcurvelynx.utils.extrapolate import LinearDecayOnMag, ZeroPadding
 from scipy.interpolate import interp1d
 
-from hyrax_parsnip import RUBIN_DIA_SETTINGS
+from hyrax_lightcurves import RUBIN_DIA_SETTINGS
 
 DP2_VISIT_DETECTOR_FILE = "/global/cfs/cdirs/lsst/shared/rubin/DP2/HATS/public-files/visit_detector.parquet"
 DP2_DIA_CATALOG = "/global/cfs/cdirs/lsst/shared/rubin/DP2/HATS/dia_object_collection/dia_object_lc"

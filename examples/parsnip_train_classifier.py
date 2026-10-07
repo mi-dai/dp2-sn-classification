@@ -32,7 +32,7 @@ import pandas as pd
 from hyrax import Hyrax
 
 import hyrax_parsnip
-from hyrax_parsnip.labels import SCHEMES, class_labels
+from hyrax_lightcurves.labels import SCHEMES, class_labels
 
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "models" / "plasticc_classifier.pkl"
 
@@ -65,9 +65,9 @@ def main():
     h.set_config("general.results_dir", args.results_dir)
     h.set_config("data_loader.batch_size", args.batch_size)
     hyrax_parsnip.configure(h, args.catalog, pretrained=model)
-    h.set_config("data_set.ParsnipHATSDataset.redshift_column", args.redshift_column or False)
-    h.set_config("data_set.ParsnipHATSDataset.mwebv_column", args.mwebv_column or False)
-    redshift_input = bool(h.config["data_set"]["ParsnipHATSDataset"]["require_redshift"])
+    h.set_config("data_set.LightCurveHATSDataset.redshift_column", args.redshift_column or False)
+    h.set_config("data_set.LightCurveHATSDataset.mwebv_column", args.mwebv_column or False)
+    redshift_input = bool(h.config["data_set"]["LightCurveHATSDataset"]["require_redshift"])
     if redshift_input and not args.redshift_column:
         parser.error(f"{model} takes a redshift input: pass --redshift-column")
     if args.redshift_column and not redshift_input:
@@ -110,7 +110,7 @@ def main():
         "class_scheme": args.classes,
         "catalog": str(Path(args.catalog).resolve()),
         "mwebv_column": args.mwebv_column or None,
-        "flux_scale": float(h.config["data_set"]["ParsnipHATSDataset"]["flux_scale"]),
+        "flux_scale": float(h.config["data_set"]["LightCurveHATSDataset"]["flux_scale"]),
         "counts": oos["label"].value_counts().to_dict(),
         "samples": oos["sample"].value_counts().to_dict() if "sample" in oos else None,
         "num_folds": args.num_folds,

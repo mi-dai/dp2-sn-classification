@@ -10,13 +10,15 @@ logger = logging.getLogger(__name__)
 LIGHTCURVE_COLUMNS = ("time", "flux", "fluxerr", "band_index")
 
 
-class ParsnipHATSDataset(HyraxDataset):
-    """Hyrax dataset serving light curves from a nested HATS catalog to ParSNIP.
+class LightCurveHATSDataset(HyraxDataset):
+    """Hyrax dataset serving light curves from a nested HATS catalog (ParSNIP, SuperNNova).
 
     The catalog is opened with ``lsdb.open_catalog`` and materialized once. Each object
-    must have a nested light-curve column (time, flux, fluxerr, band) plus per-object
-    id and redshift columns. Column names and the band mapping come from
-    ``config["data_set"]["ParsnipHATSDataset"]``.
+    must have a nested light-curve column (time, flux, fluxerr, band) plus a per-object
+    id column. Column names, the band mapping and the flux scale come from
+    ``config["data_set"]["LightCurveHATSDataset"]``; each model package's ``configure``
+    sets the band map and flux scale its model needs. Model-specific processing (time
+    windows, grouping, normalization) happens in the models, not here.
 
     Fields
     ------
@@ -35,7 +37,7 @@ class ParsnipHATSDataset(HyraxDataset):
             raise ValueError("A `data_location` pointing to a HATS catalog must be provided.")
 
         self.data_location = str(data_location)
-        settings = config["data_set"]["ParsnipHATSDataset"]
+        settings = config["data_set"]["LightCurveHATSDataset"]
         self.settings = settings
         self.band_names = list(settings["band_map"].keys())
 
@@ -76,7 +78,7 @@ class ParsnipHATSDataset(HyraxDataset):
             flat[settings["band_column"]].astype(str).map(band_lookup).fillna(-1).to_numpy(dtype=np.int64)
         )
 
-        # Convert fluxes to the zeropoint the ParSNIP model was trained with.
+        # Convert fluxes to the zeropoint the model was trained with.
         flux_scale = float(settings.get("flux_scale", 1.0))
         flux = flux * flux_scale
         fluxerr = fluxerr * flux_scale
@@ -113,7 +115,7 @@ class ParsnipHATSDataset(HyraxDataset):
         n_dropped = int(n_objects - keep.sum())
         if n_dropped:
             logger.info(
-                f"ParsnipHATSDataset: dropped {n_dropped}/{n_objects} objects with fewer than "
+                f"LightCurveHATSDataset: dropped {n_dropped}/{n_objects} objects with fewer than "
                 f"{settings['min_observations']} usable observations or no redshift."
             )
 
@@ -129,7 +131,7 @@ class ParsnipHATSDataset(HyraxDataset):
         self.label_classes, self._label_index = None, None
         if self._labels is not None:
             # Integer classes for training (Hyrax passes model inputs as numeric arrays).
-            from hyrax_parsnip.labels import class_labels, scheme_classes
+            from hyrax_lightcurves.labels import class_labels, scheme_classes
 
             scheme = settings.get("label_scheme") or "all"
             mapped = class_labels(self._labels, scheme)
@@ -163,13 +165,13 @@ class ParsnipHATSDataset(HyraxDataset):
 
     def get_label(self, idx: int) -> str:
         if self._labels is None:
-            raise RuntimeError("No `label_column` configured for ParsnipHATSDataset.")
+            raise RuntimeError("No `label_column` configured for LightCurveHATSDataset.")
         return self._labels[idx]
 
     def get_label_index(self, idx: int) -> np.int64:
         """Class index of the label under `label_scheme`, into `label_classes`."""
         if self._label_index is None:
-            raise RuntimeError("No `label_column` configured for ParsnipHATSDataset.")
+            raise RuntimeError("No `label_column` configured for LightCurveHATSDataset.")
         return self._label_index[idx]
 
     def get_lightcurve(self, idx: int) -> np.ndarray:

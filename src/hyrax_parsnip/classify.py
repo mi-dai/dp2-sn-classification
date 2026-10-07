@@ -27,7 +27,7 @@ def load_predictions(results, metadata: Table | None = None) -> Table:
         The return value of ``h.infer()``. For an older run, use
         ``hyrax.datasets.result_factories.load_results_dataset(h.config, results_dir)``.
     metadata : astropy Table, optional
-        Extra per-object columns (e.g. labels from `catalog_metadata`) joined on
+        Extra per-object columns (e.g. labels from `hyrax_lightcurves.catalog_metadata`) joined on
         ``object_id``.
 
     Returns
@@ -47,22 +47,6 @@ def load_predictions(results, metadata: Table | None = None) -> Table:
     if metadata is not None:
         predictions = join(predictions, metadata, keys="object_id", join_type="left")
     return predictions
-
-
-def catalog_metadata(catalog_path, columns: list[str], id_column: str = "object_id") -> Table:
-    """Read per-object columns (e.g. a class label) from a HATS catalog.
-
-    The id column is renamed to ``object_id`` to match `load_predictions`.
-    """
-    import lsdb
-
-    frame = lsdb.open_catalog(str(catalog_path), columns=[id_column, *columns]).compute()
-    table = Table({"object_id": np.asarray(frame[id_column], dtype=str)})
-    for column in columns:
-        values = frame[column].to_numpy()
-        # pyarrow-backed string columns come back as object arrays.
-        table[column] = np.asarray(values, dtype=str) if values.dtype == object else values
-    return table
 
 
 def valid_mask(predictions: Table) -> np.ndarray:

@@ -4,7 +4,7 @@
         [--from-pretrained plasticc] [--epochs 50] [--export model.pt]
 
 Without --from-pretrained, a new ParSNIP model is trained from scratch using the
-bands in data_set.ParsnipHATSDataset.band_map.
+bands in data_set.LightCurveHATSDataset.band_map (``hyrax_parsnip.PARSNIP_BAND_MAP``).
 
 A Hyrax epoch is one pass over the catalog. ParSNIP's own `fit` treats ~25,000
 augmented light curves as an epoch, so small catalogs need proportionally more

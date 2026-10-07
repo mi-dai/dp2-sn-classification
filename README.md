@@ -14,8 +14,8 @@ catalogs. Two classifiers are available, each as its own package in the `dp2-sn-
 | Classes | what the classifier is trained on (here: SNIa vs non-SNIa by default) | fixed by the model (e.g. SNIa/other; SN/Fast/Long/Periodic/NonPeriodic), or what it is trained on |
 | Also gives | latent features, predicted redshift; optional fine-tuning | |
 
-Both read the same catalogs with the same dataset class and Rubin DIA settings, and the example
-scripts run either one with `--method {parsnip,snn}`.
+Both read the same catalogs with the same dataset class (`hyrax_lightcurves`, a third package shared by the
+two) and Rubin DIA settings, and the example scripts run either one with `--method {parsnip,snn}`.
 
 ## Workflow
 
@@ -95,22 +95,26 @@ A nested HATS catalog with one row per object, e.g. as produced by LSDB / nested
 | `redshift`   | float (only for models that take a redshift input)      |
 | `lightcurve` | nested: `mjd`, `flux`, `fluxerr`, `band`                |
 
-Both classifiers read it with `hyrax_parsnip.dataset.ParsnipHATSDataset`. All names are configurable under
-`[data_set.ParsnipHATSDataset]`, and so are `mwebv_column`, `label_column`, `flux_scale` (multiplies flux and
-error), `flag_columns` (drops flagged points) and `photoz_column` (per-object photo-z prior, see below). For training, `label_scheme` (`ia`, `dp2` or `all`) maps the
-`label_column` types to classes, and the `label_index` field gives each object's class index. `band_map` maps catalog bands to the bands a model knows;
-see [`default_config.toml`](src/hyrax_parsnip/default_config.toml).
+Both classifiers read it with `hyrax_lightcurves.LightCurveHATSDataset`, which serves each object's cleaned light
+curve (time, flux, flux error, band index) and per-object values; each model does its own processing (time
+windows, grouping, normalization). All names are configurable under `[data_set.LightCurveHATSDataset]`, and so
+are `mwebv_column`, `label_column`, `flux_scale` (multiplies flux and error), `flag_columns` (drops flagged
+points) and `photoz_column` (per-object photo-z prior, see below). For training, `label_scheme` (`ia`, `dp2` or
+`all`) maps the `label_column` types to classes, and the `label_index` field gives each object's class index.
+`band_map` maps catalog bands to the bands a model knows; each package's `configure()` sets its own
+(`hyrax_parsnip.PARSNIP_BAND_MAP`, `hyrax_snn.SNN_BAND_MAP`). See
+[`default_config.toml`](src/hyrax_lightcurves/default_config.toml).
 
 ### Rubin DIA catalogs
 
 Rubin DIA catalogs have one row per `diaObject` with nested `diaObjectForcedSource` photometry
-(`midpointMjdTai`, `band`, `psfDiffFlux`/`psfDiffFluxErr` in nJy, flags). `RUBIN_DIA_SETTINGS` in each
-package maps these columns and drops flagged points; ParSNIP's version rescales nJy to the PLAsTiCC
-zeropoint (27.5), SuperNNova's keeps nJy:
+(`midpointMjdTai`, `band`, `psfDiffFlux`/`psfDiffFluxErr` in nJy, flags). `hyrax_lightcurves.RUBIN_DIA_SETTINGS`
+maps these columns and drops flagged points, keeping nJy; each model package has its own version with the flux
+scale its models need: ParSNIP's rescales nJy to the PLAsTiCC zeropoint (27.5), SuperNNova's keeps nJy:
 
 ```python
 for key, value in hyrax_parsnip.RUBIN_DIA_SETTINGS.items():
-    h.set_config(f"data_set.ParsnipHATSDataset.{key}", value)
+    h.set_config(f"data_set.LightCurveHATSDataset.{key}", value)
 ```
 
 ### DP2 simulation (validation)
@@ -154,7 +158,7 @@ light curve instead:
 
 ```python
 hyrax_parsnip.configure(h, catalog, pretrained="plasticc_photoz")  # also sets require_redshift = false
-h.set_config("data_set.ParsnipHATSDataset.redshift_column", False)
+h.set_config("data_set.LightCurveHATSDataset.redshift_column", False)
 predictions = hyrax_parsnip.load_predictions(h.infer())             # includes predicted_redshift
 ```
 

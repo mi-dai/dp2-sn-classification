@@ -1,0 +1,60 @@
+# Default configuration for hyrax_lightcurves. Hyrax merges this file automatically
+# whenever the runtime config references a `hyrax_lightcurves.*` class (the dataset).
+
+[data_set.LightCurveHATSDataset]
+# Top-level (per-object) columns in the HATS catalog.
+id_column = "object_id"
+redshift_column = "redshift"
+# Milky Way E(B-V) column, or false to assume no MW extinction correction.
+mwebv_column = false
+
+# Per-object host photo-z for ParSNIP models that predict redshift (see
+# [model.HyraxParsnip] photoz_fractional_error); false: the constant prior for every object.
+photoz_column = false
+# Class label column, or false if the catalog is unlabeled.
+label_column = false
+# For training (field `label_index`): how labels map to classes ("ia": SNIa vs non-SNIa,
+# "dp2": SNIa/SNII/SNIbc/other, "all": the labels as they are), and the class order
+# (empty = the scheme's default order).
+label_scheme = "all"
+label_classes = []
+
+# Nested light-curve column and its sub-columns.
+lightcurve_column = "lightcurve"
+time_column = "mjd"
+flux_column = "flux"
+fluxerr_column = "fluxerr"
+band_column = "band"
+
+# Multiplies flux and fluxerr to put them on the zeropoint the model was trained
+# with (27.5 AB for the ParSNIP PLAsTiCC models; nJy for the Fink SuperNNova models).
+# For Rubin fluxes in nJy (zeropoint 31.4 AB) to zeropoint 27.5 use
+# 10**(-0.4 * (31.4 - 27.5)) = 0.027542287.
+flux_scale = 1.0
+
+# Nested boolean sub-columns (e.g. Rubin "psfDiffFlux_flag", "pixelFlags_saturated").
+# Observations with any of them set are dropped.
+flag_columns = []
+
+# Drop objects with fewer usable observations than this.
+min_observations = 3
+
+# Drop objects without a finite redshift. Each model package's `configure` sets this:
+# true for models that take a redshift input (e.g. ParSNIP "plasticc", SuperNNova
+# "elasticc_broad"), false for the others (e.g. "plasticc_photoz", "elasticc_ia").
+require_redshift = true
+
+# Catalog band name -> band name the model knows. Each model package's `configure`
+# sets its own (ParSNIP: sncosmo names such as "lsstg"; SuperNNova: "g", ..., "Y").
+# The order here defines the band indices passed between dataset and model, so
+# this must be set globally (not per data_request via dataset_config).
+[data_set.LightCurveHATSDataset.band_map]
+u = "u"
+g = "g"
+r = "r"
+i = "i"
+z = "z"
+y = "y"
+
+# Extra keyword arguments for lsdb.open_catalog (e.g. search_filter).
+[data_set.LightCurveHATSDataset.open_catalog_kwargs]

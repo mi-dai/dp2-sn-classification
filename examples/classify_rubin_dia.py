@@ -157,7 +157,7 @@ def catalog_settings(base, args):
 def takes_redshift(h) -> bool:
     """Whether the configured model takes a per-object redshift as input. Both configure()s
     require a redshift for exactly those models (not for photo-z or no-redshift models)."""
-    return bool(h.config["data_set"]["ParsnipHATSDataset"]["require_redshift"])
+    return bool(h.config["data_set"]["LightCurveHATSDataset"]["require_redshift"])
 
 
 def add_predicted_class(predictions, class_names):
@@ -175,9 +175,9 @@ def run_parsnip(args):
     h = new_hyrax(args)
     hyrax_parsnip.configure(h, args.catalog, pretrained=args.model)
     for key, value in catalog_settings(hyrax_parsnip.RUBIN_DIA_SETTINGS, args).items():
-        h.set_config(f"data_set.ParsnipHATSDataset.{key}", value)
+        h.set_config(f"data_set.LightCurveHATSDataset.{key}", value)
     if args.photoz_column:
-        h.set_config("data_set.ParsnipHATSDataset.photoz_column", args.photoz_column)
+        h.set_config("data_set.LightCurveHATSDataset.photoz_column", args.photoz_column)
         if args.photoz_error is not None:
             h.set_config("model.HyraxParsnip.photoz_fractional_error", args.photoz_error)
         error = h.config["model"]["HyraxParsnip"]["photoz_fractional_error"]

@@ -12,7 +12,7 @@ simulation ParSNIP's ``plasticc`` models were trained on. This writes:
 
 Downloads ~22 MB, or ~330 MB with ``--ddf``, into ``--raw-dir`` (existing files are reused).
 Fluxes are kept as distributed (the values ParSNIP was trained on). The catalog uses the
-default ``[data_set.ParsnipHATSDataset]`` columns, so hyrax_parsnip reads it unchanged:
+default ``[data_set.LightCurveHATSDataset]`` columns, so the dataset reads it unchanged:
 
 - per object: ``object_id``, ``ra``, ``dec``, ``type`` (class name), ``redshift`` (true),
   ``hostgal_specz`` (NaN if none), ``hostgal_photoz``, ``hostgal_photoz_err``, ``mwebv``,

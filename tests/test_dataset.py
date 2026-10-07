@@ -1,12 +1,13 @@
 import numpy as np
 from conftest import N_OBJECTS, N_OBS
 
-from hyrax_parsnip import ParsnipHATSDataset, configure
+from hyrax_lightcurves import LightCurveHATSDataset
+from hyrax_parsnip import configure
 
 
 def make_dataset(hyrax_instance, catalog):
     configure(hyrax_instance, catalog)
-    return ParsnipHATSDataset(hyrax_instance.config, data_location=catalog)
+    return LightCurveHATSDataset(hyrax_instance.config, data_location=catalog)
 
 
 def test_filters_unusable_objects(hyrax_instance, hats_catalog):
@@ -35,8 +36,8 @@ def test_getters(hyrax_instance, hats_catalog):
 
 def test_photoz_column(hyrax_instance, hats_catalog):
     configure(hyrax_instance, hats_catalog)
-    hyrax_instance.set_config("data_set.ParsnipHATSDataset.photoz_column", "redshift")
-    dataset = ParsnipHATSDataset(hyrax_instance.config, data_location=hats_catalog)
+    hyrax_instance.set_config("data_set.LightCurveHATSDataset.photoz_column", "redshift")
+    dataset = LightCurveHATSDataset(hyrax_instance.config, data_location=hats_catalog)
     assert all(dataset.get_photoz(i) == dataset.get_redshift(i) for i in range(len(dataset)))
 
 
@@ -55,18 +56,18 @@ def test_collate_pads(hyrax_instance, hats_catalog):
 
 def test_label_column(hyrax_instance, hats_catalog):
     configure(hyrax_instance, hats_catalog)
-    hyrax_instance.set_config("data_set.ParsnipHATSDataset.label_column", "type")
-    dataset = ParsnipHATSDataset(hyrax_instance.config, data_location=hats_catalog)
+    hyrax_instance.set_config("data_set.LightCurveHATSDataset.label_column", "type")
+    dataset = LightCurveHATSDataset(hyrax_instance.config, data_location=hats_catalog)
 
     assert {dataset.get_label(i) for i in range(len(dataset))} == {"fast", "slow"}
 
 
 def test_label_index_and_schemes(hyrax_instance, hats_catalog):
-    from hyrax_parsnip.labels import class_labels, scheme_classes
+    from hyrax_lightcurves.labels import class_labels, scheme_classes
 
     configure(hyrax_instance, hats_catalog)
-    hyrax_instance.set_config("data_set.ParsnipHATSDataset.label_column", "type")
-    dataset = ParsnipHATSDataset(hyrax_instance.config, data_location=hats_catalog)
+    hyrax_instance.set_config("data_set.LightCurveHATSDataset.label_column", "type")
+    dataset = LightCurveHATSDataset(hyrax_instance.config, data_location=hats_catalog)
 
     # Scheme "all" (default): the catalog types, sorted.
     assert dataset.label_classes == ["fast", "slow"]
@@ -120,8 +121,8 @@ def test_rubin_schema_flux_scale_and_flags(hyrax_instance, tmp_path):
         "flux_scale": 0.1,
         "flag_columns": ["psfDiffFlux_flag"],
     }.items():
-        hyrax_instance.set_config(f"data_set.ParsnipHATSDataset.{key}", value)
-    dataset = ParsnipHATSDataset(hyrax_instance.config, data_location=path)
+        hyrax_instance.set_config(f"data_set.LightCurveHATSDataset.{key}", value)
+    dataset = LightCurveHATSDataset(hyrax_instance.config, data_location=path)
 
     assert len(dataset) == 4
     idx = [dataset.get_object_id(i) for i in range(4)].index(str(10**15))

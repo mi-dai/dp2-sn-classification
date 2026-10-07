@@ -28,12 +28,12 @@ def test_matches_native_parsnip(hyrax_instance, hats_catalog):
     """Hyrax inference reproduces ParSNIP's own predict() on the same light curve."""
     from astropy.table import Table
 
-    from hyrax_parsnip import ParsnipHATSDataset
+    from hyrax_lightcurves import LightCurveHATSDataset
 
     configure(hyrax_instance, hats_catalog, pretrained="plasticc")
     predictions = load_predictions(hyrax_instance.infer())
 
-    dataset = ParsnipHATSDataset(hyrax_instance.config, data_location=hats_catalog)
+    dataset = LightCurveHATSDataset(hyrax_instance.config, data_location=hats_catalog)
     object_id = dataset.get_object_id(3)
     rows = dataset.get_lightcurve(3)
     bands = np.array(["lsstu", "lsstg", "lsstr", "lssti", "lsstz", "lssty"])
@@ -57,13 +57,13 @@ def test_all_objects_match_native_parsnip_in_large_batches(hyrax_instance, hats_
     import lcdata
     from astropy.table import Table
 
-    from hyrax_parsnip import ParsnipHATSDataset
+    from hyrax_lightcurves import LightCurveHATSDataset
 
     hyrax_instance.set_config("data_loader.batch_size", N_OBJECTS)
     configure(hyrax_instance, hats_catalog, pretrained="plasticc")
     predictions = load_predictions(hyrax_instance.infer())
 
-    dataset = ParsnipHATSDataset(hyrax_instance.config, data_location=hats_catalog)
+    dataset = LightCurveHATSDataset(hyrax_instance.config, data_location=hats_catalog)
     bands = np.array(["lsstu", "lsstg", "lsstr", "lssti", "lsstz", "lssty"])
     light_curves = []
     for idx in range(len(dataset)):
@@ -86,7 +86,7 @@ def test_all_objects_match_native_parsnip_in_large_batches(hyrax_instance, hats_
 def test_photoz_model_without_redshift(hyrax_instance, hats_catalog):
     """plasticc_photoz predicts redshift, so objects without one are kept and processed."""
     configure(hyrax_instance, hats_catalog, pretrained="plasticc_photoz")
-    hyrax_instance.set_config("data_set.ParsnipHATSDataset.redshift_column", False)
+    hyrax_instance.set_config("data_set.LightCurveHATSDataset.redshift_column", False)
     predictions = load_predictions(hyrax_instance.infer())
 
     # All objects with a usable band are kept, including "no_redshift".
@@ -108,7 +108,7 @@ def test_photoz_prior_from_column(hats_catalog, tmp_path):
         h.set_config("general.results_dir", str(tmp_path / name))
         h.set_config("data_loader.batch_size", 8)
         configure(h, hats_catalog, pretrained="plasticc_photoz")
-        h.set_config("data_set.ParsnipHATSDataset.photoz_column", column)
+        h.set_config("data_set.LightCurveHATSDataset.photoz_column", column)
         h.set_config("model.HyraxParsnip.photoz_fractional_error", 0.01)
         predictions = load_predictions(h.infer())
         predictions.sort("object_id")

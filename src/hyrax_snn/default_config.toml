@@ -1,6 +1,6 @@
 # Default configuration for hyrax-snn. Hyrax merges this file automatically whenever
 # the runtime config references a `hyrax_snn.*` class. The dataset is
-# hyrax_parsnip's ParsnipHATSDataset; see hyrax_parsnip/default_config.toml.
+# hyrax_lightcurves' LightCurveHATSDataset; see hyrax_lightcurves/default_config.toml.
 
 [model.HyraxSNN]
 # Pretrained SuperNNova model: a built-in Fink ELAsTiCC model name or a SuperNNova
