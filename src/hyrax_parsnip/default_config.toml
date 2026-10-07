@@ -38,6 +38,11 @@ redshift_column = "redshift"
 mwebv_column = false
 # Class label column, or false if the catalog is unlabeled.
 label_column = false
+# For training (field `label_index`): how labels map to classes ("ia": SNIa vs non-SNIa,
+# "dp2": SNIa/SNII/SNIbc/other, "all": the labels as they are), and the class order
+# (empty = the scheme's default order).
+label_scheme = "all"
+label_classes = []
 
 # Nested light-curve column and its sub-columns.
 lightcurve_column = "lightcurve"

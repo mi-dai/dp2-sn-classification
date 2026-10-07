@@ -91,6 +91,9 @@ class SNNSettings:
     bidirectional: bool
     layer_type: str
     rnn_output_option: str
+    # Models trained with hyrax_snn (snn_train.py) record these; the Fink models don't.
+    flux_zeropoint: float | None = None  # zeropoint of the training fluxes (None: nJy, as for Fink)
+    class_weights: list[float] | None = None  # cross-entropy weights used in training
 
     @property
     def filter_combinations(self) -> list[str]:
@@ -114,7 +117,8 @@ def load_settings(model_dir: str | Path, class_names: list[str] | None = None, f
     minimum of the training data, but stores the minimum clipped to -2000, and trains
     with the clipped value. With the fix, min = -exp(mean) is restored for those
     features, so the normalization matches its mean/std instead of what the network was
-    trained on. Off by default (training-consistent).
+    trained on. Off by default (training-consistent). Models trained with hyrax_snn store a
+    minimum consistent with their mean/std, so it doesn't apply to them.
     """
     model_dir = Path(model_dir)
     with open(model_dir / "cli_args.json") as f:
@@ -127,12 +131,12 @@ def load_settings(model_dir: str | Path, class_names: list[str] | None = None, f
         [[norm_json[f]["min"], norm_json[f]["mean"], norm_json[f]["std"]] for f in features_to_normalize],
         dtype=np.float64,
     )
-    if fix_clipped_min:
+    if fix_clipped_min and cli.get("trained_with") != "hyrax_snn":
         clipped = (arr_norm[:, 0] == -2000) & (arr_norm[:, 1] > np.log(4000))
         arr_norm[clipped, 0] = -np.exp(arr_norm[clipped, 1])
 
     if class_names is None:
-        class_names = [f"class{i}" for i in range(int(cli["nb_classes"]))]
+        class_names = cli.get("class_names") or [f"class{i}" for i in range(int(cli["nb_classes"]))]
     if len(class_names) != int(cli["nb_classes"]):
         raise ValueError(f"{len(class_names)} class names for a model with {cli['nb_classes']} classes")
 
@@ -152,6 +156,8 @@ def load_settings(model_dir: str | Path, class_names: list[str] | None = None, f
         bidirectional=bool(cli["bidirectional"]),
         layer_type=cli["layer_type"],
         rnn_output_option=cli["rnn_output_option"],
+        flux_zeropoint=cli.get("flux_zeropoint"),
+        class_weights=cli.get("class_weights"),
     )
 
 

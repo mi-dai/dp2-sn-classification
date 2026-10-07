@@ -53,6 +53,26 @@ def test_label_column(hyrax_instance, hats_catalog):
     assert {dataset.get_label(i) for i in range(len(dataset))} == {"fast", "slow"}
 
 
+def test_label_index_and_schemes(hyrax_instance, hats_catalog):
+    from hyrax_parsnip.labels import class_labels, scheme_classes
+
+    configure(hyrax_instance, hats_catalog)
+    hyrax_instance.set_config("data_set.ParsnipHATSDataset.label_column", "type")
+    dataset = ParsnipHATSDataset(hyrax_instance.config, data_location=hats_catalog)
+
+    # Scheme "all" (default): the catalog types, sorted.
+    assert dataset.label_classes == ["fast", "slow"]
+    for i in range(len(dataset)):
+        assert dataset.label_classes[dataset.get_label_index(i)] == dataset.get_label(i)
+    assert dataset.get_label_index(0).dtype == np.int64
+
+    types = ["SNIa", "SNII", "SNIbc", "KN", "SNIa-91bg"]
+    assert list(class_labels(types, "ia")) == ["SNIa", "non-SNIa", "non-SNIa", "non-SNIa", "non-SNIa"]
+    assert list(class_labels(types, "dp2")) == ["SNIa", "SNII", "SNIbc", "other", "other"]
+    assert scheme_classes("ia") == ["SNIa", "non-SNIa"]
+    assert scheme_classes("all", types) == sorted(types)
+
+
 def test_rubin_schema_flux_scale_and_flags(hyrax_instance, tmp_path):
     """Rubin-style catalog: nJy fluxes, quality flags, extra columns, no redshift."""
     import lsdb

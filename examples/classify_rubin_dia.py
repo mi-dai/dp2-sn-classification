@@ -16,8 +16,9 @@ observations, and runs a pretrained model:
   labeled light curves run through the same model (``parsnip_train_classifier.py``). Its
   ``.json`` sets the default ``--model`` and is checked: the model and whether it takes the
   redshift must match how the classifier was trained.
-- ``--method snn``: class probabilities from a pretrained SuperNNova model (Fink ELAsTiCC),
-  fluxes kept in nJy. Default ``elasticc_ia`` (SNIa vs other, no redshift); with
+- ``--method snn``: class probabilities from a SuperNNova model: a pretrained Fink ELAsTiCC
+  model (fluxes kept in nJy) or a model directory trained with ``snn_train.py`` (fluxes
+  rescaled to its training zeropoint). Default ``elasticc_ia`` (SNIa vs other, no redshift); with
   ``--redshift-column`` the default is ``elasticc_broad`` (SN, Fast, Long, Periodic,
   NonPeriodic). Models are downloaded on first use (run once on a NERSC login node).
   ``--fink-exact`` approximates Fink's own input processing, for comparison.
@@ -52,8 +53,8 @@ def parse_args():
     parser.add_argument(
         "--model",
         help=f"Pretrained model. parsnip: {', '.join(PARSNIP_MODELS)} or a .pt path (default plasticc_photoz, or "
-        f"plasticc with --redshift-column); snn: {', '.join(sorted(hyrax_snn.PRETRAINED_MODELS))} "
-        "(default elasticc_ia, or elasticc_broad with --redshift-column)",
+        f"plasticc with --redshift-column); snn: {', '.join(sorted(hyrax_snn.PRETRAINED_MODELS))} or a model "
+        "directory from snn_train.py (default elasticc_ia, or elasticc_broad with --redshift-column)",
     )
     parser.add_argument(
         "--output", help="Output table (.parquet/.ecsv; default examples/results/<method>_predictions.parquet)"
@@ -91,8 +92,15 @@ def parse_args():
             args.model = "elasticc_broad" if args.redshift_column else "elasticc_ia"
     elif args.method == "parsnip" and args.model not in PARSNIP_MODELS and not args.model.endswith(".pt"):
         parser.error(f"--model {args.model!r} is not a ParSNIP model ({', '.join(PARSNIP_MODELS)} or a .pt file)")
-    elif args.method == "snn" and args.model not in hyrax_snn.PRETRAINED_MODELS:
-        parser.error(f"--model {args.model!r} is not a SuperNNova model ({', '.join(sorted(hyrax_snn.PRETRAINED_MODELS))})")
+    elif (
+        args.method == "snn"
+        and args.model not in hyrax_snn.PRETRAINED_MODELS
+        and not (Path(args.model) / "cli_args.json").exists()
+    ):
+        parser.error(
+            f"--model {args.model!r} is not a SuperNNova model ({', '.join(sorted(hyrax_snn.PRETRAINED_MODELS))}, "
+            "or a model directory with cli_args.json)"
+        )
     args.output = args.output or str(RESULTS / f"{args.method}_predictions.parquet")
     return args
 
@@ -185,7 +193,8 @@ def run_parsnip(args):
 def run_snn(args):
     """Class probabilities from a pretrained SuperNNova model."""
     h = new_hyrax(args)
-    settings = catalog_settings(hyrax_snn.RUBIN_DIA_SETTINGS, args)
+    # Fink models expect nJy; models trained with snn_train.py the zeropoint of their training fluxes.
+    settings = catalog_settings(hyrax_snn.rubin_dia_settings(args.model), args)
     if args.fink_exact:
         settings["flux_scale"] = hyrax_snn.FINK_EXACT_FLUX_SCALE
     hyrax_snn.configure(h, args.catalog, pretrained=args.model, dataset_settings=settings)

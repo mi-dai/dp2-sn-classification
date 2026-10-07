@@ -150,10 +150,59 @@ def test_detection_snr_and_window_options_run(hyrax_instance, hats_catalog, mode
     assert np.isfinite(np.asarray(predictions["class0"])).sum() > 0
 
 
-def test_training_is_not_supported(hyrax_instance, hats_catalog, model_dir):
-    from hyrax_snn import HyraxSNN
+# ── training ────────────────────────────────────────────────────────────────
 
-    configure(hyrax_instance, hats_catalog, pretrained=str(model_dir))
-    model = HyraxSNN(hyrax_instance.config)
-    with pytest.raises(NotImplementedError):
-        model.train_batch(None)
+
+def test_train_export_and_infer(hats_catalog, tmp_path):
+    from hyrax import Hyrax
+
+    from hyrax_snn import new_model_dir, training_dataset
+    from hyrax_snn.config import SNN_BAND_MAP
+
+    dataset_settings = {"label_column": "type"}  # scheme "all": fast, slow
+    output = tmp_path / "trained"
+    h = Hyrax()
+    h.set_config("general.results_dir", str(tmp_path / "results"))
+    h.set_config("data_loader.batch_size", 8)
+    h.set_config("train.epochs", 2)
+    h.set_config("split.train", 0.75)
+    h.set_config("split.validate", 0.25)
+    dataset = training_dataset(h, hats_catalog, dataset_settings)
+    settings = new_model_dir(
+        output, dataset, list(SNN_BAND_MAP.values()), h.config["model"]["HyraxSNN"], hidden_dim=8
+    )
+
+    # Classes, class weights and global normalization from the training set.
+    assert settings.class_names == ["fast", "slow"]
+    # Inverse class frequency, mean 1: 13 fast (incl. no_redshift, kept without redshift), 12 slow.
+    np.testing.assert_allclose(settings.class_weights, [25 / 26, 25 / 24])
+    norm = json.loads((output / "data_norm.json").read_text())
+    assert norm["FLUXCAL_u"] == norm["FLUXCAL_Y"] != norm["FLUXCALERR_u"]
+    assert norm["FLUXCAL_g"]["min"] < 0 and norm["delta_time"]["min"] == 0
+    assert not (output / "model.pt").exists()
+
+    configure(h, hats_catalog, pretrained=str(output), groups=("train", "validate"), dataset_settings=dataset_settings)
+    model = h.train()
+    # Validation loss over all validation objects each epoch; the best epoch's weights are exported.
+    assert len(model.validation_history) == 2 and model.best_epoch in (1, 2)
+    model.export_snn(output)
+    assert (output / "model.pt").exists()
+
+    # The trained directory is used like a pretrained model.
+    h_infer = Hyrax()
+    h_infer.set_config("general.results_dir", str(tmp_path / "results"))
+    predictions = infer(h_infer, hats_catalog, output)
+    assert len(predictions) == N_OBJECTS + 1
+    probabilities = np.stack([predictions["fast"], predictions["slow"]], axis=1)
+    np.testing.assert_allclose(probabilities.sum(axis=1), 1, rtol=1e-5)
+
+
+def test_log_standardization_clips_min():
+    from hyrax_snn.training import log_standardization
+
+    values = np.array([-1e5, -10.0, 0.0, 50.0, 500.0])
+    stats = log_standardization(values)
+    assert stats["min"] == -2000.0  # as SuperNNova; the bright variable's -1e5 doesn't set it
+    logs = np.log(np.clip(values, -2000.0, None) + 2000.0 + 1e-5)
+    assert stats["mean"] == pytest.approx(logs.mean()) and stats["std"] == pytest.approx(logs.std())
+    assert log_standardization(np.array([1.0, 2.0]))["min"] == 1.0

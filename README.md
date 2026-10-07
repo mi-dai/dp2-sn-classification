@@ -8,10 +8,10 @@ catalogs. Two classifiers are available, each as its own package in the `dp2-sn-
 |---|---|---|
 | Model | [ParSNIP](https://parsnip.readthedocs.io) generative model + LightGBM classifier | [SuperNNova](https://supernnova.readthedocs.io) recurrent network |
 | Pretrained | `plasticc`, `plasticc_photoz`, `ps1` (light-curve model only) | Fink's ELAsTiCC classifiers (complete) |
-| Training needed | the LightGBM classifier, once (here: on PLAsTiCC) | none (inference only) |
+| Training needed | the LightGBM classifier, once (here: on PLAsTiCC) | none; optional training (e.g. on PLAsTiCC) |
 | Without redshift | `plasticc_photoz` (predicts the redshift) | `elasticc_ia`, `SN_vs_other` |
 | With redshift | `plasticc` | `elasticc_broad`, `*_vs_other` |
-| Classes | what the classifier is trained on (here: SNIa vs non-SNIa by default) | fixed by the model (e.g. SNIa/other; SN/Fast/Long/Periodic/NonPeriodic) |
+| Classes | what the classifier is trained on (here: SNIa vs non-SNIa by default) | fixed by the model (e.g. SNIa/other; SN/Fast/Long/Periodic/NonPeriodic), or what it is trained on |
 | Also gives | latent features, predicted redshift; optional fine-tuning | |
 
 Both read the same catalogs with the same dataset class and Rubin DIA settings, and the example
@@ -35,6 +35,10 @@ python examples/evaluate.py data/dp2_sim_sne examples/results/parsnip_prediction
 # SuperNNova: pretrained, classify and score
 python examples/classify_rubin_dia.py data/dp2_sim_sne --method snn
 python examples/evaluate.py data/dp2_sim_sne examples/results/snn_predictions.parquet
+
+# SuperNNova trained on PLAsTiCC (optional), to compare with ParSNIP on the same training data
+python examples/snn_train.py data/plasticc_hats   # writes examples/models/snn_plasticc/
+python examples/classify_rubin_dia.py data/dp2_sim_sne --method snn --model examples/models/snn_plasticc
 
 # Real data: classify_rubin_dia.py defaults to the EDP2 catalog
 python examples/classify_rubin_dia.py --method parsnip --classifier examples/models/plasticc_classifier.pkl
@@ -93,7 +97,8 @@ A nested HATS catalog with one row per object, e.g. as produced by LSDB / nested
 
 Both classifiers read it with `hyrax_parsnip.dataset.ParsnipHATSDataset`. All names are configurable under
 `[data_set.ParsnipHATSDataset]`, and so are `mwebv_column`, `label_column`, `flux_scale` (multiplies flux and
-error) and `flag_columns` (drops flagged points). `band_map` maps catalog bands to the bands a model knows;
+error) and `flag_columns` (drops flagged points). For training, `label_scheme` (`ia`, `dp2` or `all`) maps the
+`label_column` types to classes, and the `label_index` field gives each object's class index. `band_map` maps catalog bands to the bands a model knows;
 see [`default_config.toml`](src/hyrax_parsnip/default_config.toml).
 
 ### Rubin DIA catalogs
@@ -220,8 +225,8 @@ results = h.infer()                    # uses the latest training run
 
 ## SuperNNova (`hyrax_snn`)
 
-`hyrax_snn` runs pretrained SuperNNova classifiers through Hyrax, reading catalogs with the same dataset and
-settings as ParSNIP. There is no training: the models are complete classifiers trained by the
+`hyrax_snn` runs SuperNNova classifiers through Hyrax, reading catalogs with the same dataset and
+settings as ParSNIP. By default no training is needed: the pretrained models are complete classifiers trained by the
 [Fink](https://fink-broker.org) broker on ELAsTiCC (Fraga et al. 2024,
 [arXiv:2404.08798](https://arxiv.org/abs/2404.08798)), published in
 [fink-science](https://github.com/astrolabsoftware/fink-science) (Apache-2.0). They are downloaded from a
@@ -265,7 +270,50 @@ How the input is prepared matters, and is configurable under `[model.HyraxSNN]`:
 - `hyrax_snn.FINK_EXACT` (+ `flux_scale = FINK_EXACT_FLUX_SCALE`) approximates Fink's own processing, for
   comparison (`classify_rubin_dia.py --method snn --fink-exact`).
 
-On our small toy simulation the models performed poorly whichever way the input was prepared (e.g.
+### Training SuperNNova (optional)
+
+No pretrained SuperNNova models exist for PLAsTiCC, so to compare with ParSNIP on the same training data,
+`hyrax_snn` can also train one with Hyrax (`h.train()`):
+
+```bash
+python examples/snn_train.py data/plasticc_hats [--output examples/models/snn_plasticc] [--classes {ia,dp2,all}] \
+    [--redshift-column redshift] [--epochs 90] [--validate-fraction 0.1]
+```
+
+- SuperNNova's default network and training: bi-LSTM (32 x 2), dropout 0.05, Adam (lr 1e-3, weight decay
+  1e-7), cross-entropy weighted by inverse class frequency, random-length truncation, learning rate reduced on
+  plateau, 90 epochs, batch 128.
+- "global" normalization (log-standardization shared by all bands' fluxes, and by their errors) from the
+  training light curves. As in SuperNNova, the flux minimum is floored at −2000 (zeropoint 27.5), so bright
+  variable stars don't squash all supernova fluxes to one value; unlike SuperNNova, the mean and std use the
+  same floored minimum, so training and inference match exactly.
+- A held-out fraction (`--validate-fraction`, default 0.1) drives the learning rate (reduced 10x when the
+  validation loss stops improving) and the export: the weights of the epoch with the lowest validation loss
+  are kept, as in SuperNNova. Its accuracy and recall per class are printed at the end.
+- Classes from the catalog's `type` column: `ia` (default, SNIa vs non-SNIa), `dp2` (SNIa/SNII/SNIbc/other),
+  `all`. No redshift by default; `--redshift-column` trains a model that takes it.
+- About 6 s per epoch for the PLAsTiCC training set on an Apple M-series CPU, so roughly an hour for the
+  training set + DDF (40,774 objects) and 90 epochs. `nersc/snn_train.sbatch` runs it at NERSC.
+
+The result is an ordinary SuperNNova model directory (`cli_args.json`, `data_norm.json`, `model.pt`), used
+like the built-in names: `pretrained="<dir>"`, or `classify_rubin_dia.py --method snn --model <dir>`.
+`cli_args.json` also records the class names, class weights, a training summary and `flux_zeropoint` (27.5
+for PLAsTiCC); `hyrax_snn.rubin_dia_settings(model)` gives `RUBIN_DIA_SETTINGS` with the matching flux scale
+(nJy rescaled to zeropoint 27.5 for such a model, nJy for the Fink models). In Python:
+
+```python
+from hyrax_snn import configure, new_model_dir, training_dataset, SNN_BAND_MAP
+
+h = Hyrax()
+h.set_config("split.train", 0.9); h.set_config("split.validate", 0.1)
+settings = {"label_column": "type", "label_scheme": "ia", "mwebv_column": "mwebv"}   # + catalog columns
+dataset = training_dataset(h, catalog, settings)
+new_model_dir("snn_plasticc", dataset, list(SNN_BAND_MAP.values()), h.config["model"]["HyraxSNN"], flux_zeropoint=27.5)
+configure(h, catalog, pretrained="snn_plasticc", groups=("train", "validate"), dataset_settings=settings)
+h.train().export_snn("snn_plasticc")
+```
+
+On our small toy simulation the Fink models performed poorly whichever way the input was prepared (e.g.
 `elasticc_ia` AUC 0.3–0.75, against 0.95 for ParSNIP with the PLAsTiCC classifier); validate on the DP2
 simulation before relying on them.
 
@@ -273,7 +321,7 @@ simulation before relying on them.
 
 Shared by both classifiers:
 - `examples/classify_rubin_dia.py --method {parsnip,snn}`: classify a Rubin DIA catalog (default: the EDP2
-  catalog). `--model` picks the pretrained model, `--redshift-column` is for models with redshift input;
+  catalog). `--model` picks the pretrained model (snn: also a model directory from `snn_train.py`), `--redshift-column` is for models with redshift input;
   parsnip: `--classifier` for class probabilities; snn: `--fink-exact` and the input options.
 - `examples/evaluate.py`: score predictions from either method against a simulated catalog's truth
   (SN Ia vs non-Ia confusion matrix, or predicted class per true type for models without an SNIa class; recall
@@ -285,6 +333,8 @@ Shared by both classifiers:
   if `examples/models/plasticc_classifier.pkl` doesn't exist yet (training set + DDF, ~35 min;
   `DEMO_PLASTICC_DDF=0` for the training set only, ~7 min). `DEMO_CATALOG` / `DEMO_CLASSIFIER` override the
   paths. Needs the `notebook` extra (and lightcurvelynx to simulate).
+  It also shows a SuperNNova trained on PLAsTiCC if `examples/models/snn_plasticc/` exists (`DEMO_SNN_MODEL`
+  overrides the path); it doesn't train one.
 - `examples/simulate_dp2.py`: the DP2 validation simulation, e.g.
   `python examples/simulate_dp2.py data/dp2_sim_sne --n-per-class 5000` for a larger set.
 
@@ -294,6 +344,9 @@ ParSNIP only:
 - `examples/parsnip_train_classifier.py`: train ParSNIP's LightGBM classifier on a labeled catalog; writes the
   classifier, its `.json` and K-fold results.
 - `examples/parsnip_train_then_infer.py`: train or fine-tune ParSNIP itself, export, then run inference.
+
+SuperNNova only:
+- `examples/snn_train.py`: train SuperNNova on a labeled catalog (optional; see above).
 
 ## Notes
 
@@ -317,7 +370,8 @@ The tests build a small synthetic nested HATS catalog and cover:
 - ParSNIP: pretrained inference checked against native `parsnip.predict` (all objects, large batches), the
   photo-z model without redshifts, training from scratch, fine-tuning and export, and the classifier
   (including reloading it in a fresh process)
-- SuperNNova: a synthetic model (features, batch-order invariance, with/without redshift), and the Fink models
+- SuperNNova: a synthetic model (features, batch-order invariance, with/without redshift), training, export
+  and reuse as a model directory, and the Fink models
   against SuperNNova itself (`tests/test_snn_reference.py`; skipped unless `supernnova` is installed:
   `.venv/bin/pip install --no-deps supernnova==3.0.51 natsort seaborn`)
 - the PLAsTiCC converter (`examples/plasticc_to_hats.py`)

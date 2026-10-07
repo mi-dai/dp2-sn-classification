@@ -24,6 +24,7 @@ class ParsnipHATSDataset(HyraxDataset):
     redshift : float
     mwebv : float (0 when no ``mwebv_column`` is configured)
     label : str (requires ``label_column``)
+    label_index : int, index into `label_classes` of the label mapped by ``label_scheme``
     lightcurve : float64 array of shape (n_obs, 4) with columns
         ``LIGHTCURVE_COLUMNS``; ``band_index`` indexes into ``band_map``.
     """
@@ -123,6 +124,19 @@ class ParsnipHATSDataset(HyraxDataset):
         self._mwebv = self._column(frame, settings.get("mwebv_column"), 0.0)[keep]
         label_column = settings.get("label_column")
         self._labels = frame[label_column].astype(str).to_numpy()[keep] if label_column else None
+        self.label_classes, self._label_index = None, None
+        if self._labels is not None:
+            # Integer classes for training (Hyrax passes model inputs as numeric arrays).
+            from hyrax_parsnip.labels import class_labels, scheme_classes
+
+            scheme = settings.get("label_scheme") or "all"
+            mapped = class_labels(self._labels, scheme)
+            self.label_classes = list(settings.get("label_classes") or scheme_classes(scheme, mapped))
+            lookup = {name: i for i, name in enumerate(self.label_classes)}
+            unknown = sorted(set(mapped) - set(lookup))
+            if unknown:
+                raise ValueError(f"Labels {unknown} are not in label_classes {self.label_classes}")
+            self._label_index = np.array([lookup[m] for m in mapped], dtype=np.int64)
 
     @staticmethod
     def _column(frame, column, fill_value) -> np.ndarray:
@@ -146,6 +160,12 @@ class ParsnipHATSDataset(HyraxDataset):
         if self._labels is None:
             raise RuntimeError("No `label_column` configured for ParsnipHATSDataset.")
         return self._labels[idx]
+
+    def get_label_index(self, idx: int) -> np.int64:
+        """Class index of the label under `label_scheme`, into `label_classes`."""
+        if self._label_index is None:
+            raise RuntimeError("No `label_column` configured for ParsnipHATSDataset.")
+        return self._label_index[idx]
 
     def get_lightcurve(self, idx: int) -> np.ndarray:
         return self._lightcurve_data[self._starts[idx] : self._stops[idx]]

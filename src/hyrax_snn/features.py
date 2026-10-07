@@ -24,6 +24,18 @@ def apply_time_window(time, flux, fluxerr, window) -> np.ndarray:
     return (time >= peak + window[0]) & (time <= peak + window[1])
 
 
+def select_observations(time, flux, fluxerr, bands, time_window=None, detection_snr=None):
+    """Observations kept for SuperNNova: above `detection_snr` (if set), then within `time_window`
+    days of the max-S/N point (if set). The same selection is used for training and inference."""
+    if detection_snr is not None:
+        mask = flux / fluxerr > detection_snr
+        time, flux, fluxerr, bands = time[mask], flux[mask], fluxerr[mask], bands[mask]
+    if len(time) and time_window:
+        mask = apply_time_window(time, flux, fluxerr, time_window)
+        time, flux, fluxerr, bands = time[mask], flux[mask], fluxerr[mask], bands[mask]
+    return time, flux, fluxerr, bands
+
+
 def _group_times(time: np.ndarray) -> np.ndarray:
     """SuperNNova's sequential grouping: a new time step starts at the first observation,
     at any repeated timestamp, or more than GROUP_WINDOW_DAYS after the step's start."""
@@ -48,8 +60,12 @@ def build_features(
     mwebv: float = 0.0,
     redshift: float = 0.0,
     redshift_error: float = 0.0,
+    normalize_features: bool = True,
 ) -> np.ndarray | None:
     """Normalized (n_steps, n_features) float32 input for one light curve, or None if empty.
+
+    With ``normalize_features=False`` the raw features are returned in `settings.all_features`
+    order (for computing normalization statistics).
 
     `bands` are SuperNNova filter names (e.g. "u", ..., "Y"); observations in other bands
     are ignored. Fluxes must be in the units the model expects.
@@ -110,6 +126,8 @@ def build_features(
     if missing:
         raise ValueError(f"Cannot build SuperNNova features {missing}")
     x = np.stack([columns[f] for f in settings.all_features], axis=1)
+    if not normalize_features:
+        return x
 
     x = normalize(x, settings)
     model_columns = [settings.all_features.index(f) for f in settings.model_features]

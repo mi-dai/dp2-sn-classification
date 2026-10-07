@@ -32,19 +32,9 @@ import pandas as pd
 from hyrax import Hyrax
 
 import hyrax_parsnip
+from hyrax_parsnip.labels import SCHEMES, class_labels
 
-DP2_CLASSES = ["SNIa", "SNII", "SNIbc"]
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "models" / "plasticc_classifier.pkl"
-
-
-def class_labels(types, scheme: str) -> np.ndarray:
-    """Training labels: `ia` SNIa vs non-SNIa, `dp2` SNIa/SNII/SNIbc/other, `all` the catalog types."""
-    types = np.asarray(types, dtype=str)
-    if scheme == "ia":
-        return np.where(types == "SNIa", "SNIa", "non-SNIa")
-    if scheme == "dp2":
-        return np.where(np.isin(types, DP2_CLASSES), types, "other")
-    return types
 
 
 def main():
@@ -55,7 +45,7 @@ def main():
     parser.add_argument("--redshift-column", help="Per-object redshift column to give the model (e.g. redshift)")
     parser.add_argument("--mwebv-column", default="mwebv", help="Milky Way E(B-V) column ('' for none)")
     parser.add_argument("--label-column", default="type", help="Class label column")
-    parser.add_argument("--classes", choices=["ia", "dp2", "all"], default="ia", help="Class scheme (default: SNIa vs non-SNIa)")
+    parser.add_argument("--classes", choices=SCHEMES, default="ia", help="Class scheme (default: SNIa vs non-SNIa)")
     parser.add_argument("--num-folds", type=int, default=5)
     parser.add_argument(
         "--min-child-weight", type=float, default=10.0,

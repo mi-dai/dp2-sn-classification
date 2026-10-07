@@ -31,7 +31,7 @@ def configure(
     groups: tuple[str, ...] = ("infer",),
     dataset_settings: dict | None = None,
 ):
-    """Point a Hyrax instance at a HATS catalog and a pretrained SuperNNova model.
+    """Point a Hyrax instance at a HATS catalog and a SuperNNova model (pretrained or to train).
 
     Parameters
     ----------
@@ -43,7 +43,8 @@ def configure(
         Built-in model name (see `hyrax_snn.PRETRAINED_MODELS`) or a SuperNNova model
         directory. Built-in models are downloaded on first use.
     groups : tuple of str
-        data_request groups to create.
+        data_request groups to create; "train" / "validate" also request ``label_index``
+        (set ``label_column`` and ``label_scheme`` in `dataset_settings`).
     dataset_settings : dict, optional
         `[data_set.ParsnipHATSDataset]` overrides, e.g. `RUBIN_DIA_SETTINGS` plus a
         `redshift_column`. They are applied after the SuperNNova band map.
@@ -57,7 +58,8 @@ def configure(
             "data": {
                 "dataset_class": DATASET_CLASS,
                 "data_location": str(catalog_path),
-                "fields": list(MODEL_FIELDS),
+                # Training groups also need the class index of each object.
+                "fields": list(MODEL_FIELDS) + (["label_index"] if group in ("train", "validate") else []),
                 "primary_id_field": "object_id",
             }
         }
@@ -72,5 +74,18 @@ def configure(
     snn = resolve(str(pretrained), cache_dir=settings["cache_dir"] or None)
     # Models that take a redshift input need one per object; the others don't.
     h.set_config("data_set.ParsnipHATSDataset.require_redshift", snn.redshift != "none")
-    h.set_config("infer.model_weights_file", str(snn.model_dir / "model.pt"))
+    # A new model (no model.pt yet) is trained first; inference then uses the latest training run.
+    weights = snn.model_dir / "model.pt"
+    h.set_config("infer.model_weights_file", str(weights) if weights.exists() else False)
     return h
+
+
+def rubin_dia_settings(pretrained: str = "elasticc_ia", cache_dir=None) -> dict:
+    """`RUBIN_DIA_SETTINGS` with the flux scale `pretrained` expects: nJy for the Fink models, and
+    nJy rescaled to the model's ``flux_zeropoint`` for models trained with hyrax_snn on other
+    fluxes (e.g. zp 27.5 for PLAsTiCC)."""
+    settings = dict(RUBIN_DIA_SETTINGS)
+    zeropoint = resolve(str(pretrained), cache_dir=cache_dir).flux_zeropoint
+    if zeropoint is not None:
+        settings["flux_scale"] = 10 ** (-0.4 * (31.4 - float(zeropoint)))
+    return settings

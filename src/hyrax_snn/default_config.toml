@@ -33,3 +33,9 @@ redshift_error = 0.0
 # mean/std used the true minimum; the models were trained with the clipped value
 # (training-consistent: false). true restores min = -exp(mean) instead.
 fix_clipped_norm_min = false
+
+# Training (optional; see examples/snn_train.py). SuperNNova's defaults.
+learning_rate = 1e-3
+weight_decay = 1e-7
+# Truncate each training light curve to a random length (>= 3 steps), as SuperNNova does.
+random_length = true
