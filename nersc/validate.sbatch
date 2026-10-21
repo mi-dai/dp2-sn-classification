@@ -8,14 +8,16 @@
 #SBATCH --output=nersc/logs/%x-%j.out
 # Classify the DP2 validation simulation with both models and score them against the truth.
 # Submit from the repo root:
-#   sbatch -A <account> -q <qos> nersc/validate.sbatch [CATALOG=data/dp2_sim_sne] [CLASSIFIER=examples/models/plasticc_classifier.pkl]
+#   sbatch -A <account> -q <qos> nersc/validate.sbatch [CATALOG=data/dp2_sim_sne] [CLASSIFIER=examples/models/plasticc_classifier.pkl] [SNN_MODEL=examples/models/snn_plasticc]
 # Outputs in examples/results/validate/: predictions (*.parquet) and figures (eval_*/).
 # ParSNIP is skipped if the classifier doesn't exist (run train_parsnip_classifier.sbatch first).
+# A trained SuperNNova model directory (snn_train.sbatch) is run too if it exists, as snn_<dir name>.
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
 CATALOG=${1:-data/dp2_sim_sne}
 CLASSIFIER=${2:-examples/models/plasticc_classifier.pkl}
+SNN_MODEL=${3:-examples/models/snn_plasticc}
 OUT=examples/results/validate
 mkdir -p "$OUT"
 run() { .venv/bin/python examples/classify_rubin_dia.py "$CATALOG" --results-dir "$OUT/hyrax" "$@"; }
@@ -29,3 +31,9 @@ fi
 # SuperNNova without redshift, and elasticc_broad given the true redshift (flagged by evaluate.py).
 run --method snn --model elasticc_ia --mwebv-column mwebv --output "$OUT/snn_ia.parquet" && evaluate snn_ia
 run --method snn --redshift-column redshift --mwebv-column mwebv --output "$OUT/snn_broad.parquet" && evaluate snn_broad
+if [ -d "$SNN_MODEL" ]; then
+    NAME=snn_$(basename "$SNN_MODEL")
+    run --method snn --model "$SNN_MODEL" --mwebv-column mwebv --output "$OUT/$NAME.parquet" && evaluate "$NAME"
+else
+    echo "No $SNN_MODEL: skipping the trained SuperNNova model"
+fi
