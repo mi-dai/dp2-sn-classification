@@ -36,6 +36,9 @@ python examples/evaluate.py data/dp2_sim_sne examples/results/parsnip_prediction
 python examples/classify_rubin_dia.py data/dp2_sim_sne --method snn
 python examples/evaluate.py data/dp2_sim_sne examples/results/snn_predictions.parquet
 
+# SuperNNova model directory written by SuperNNova itself (e.g. trained on ELAsTiCC)
+python examples/classify_rubin_dia.py data/dp2_sim_sne --method snn --model /path/to/models/<model name>
+
 # SuperNNova trained on PLAsTiCC (optional), to compare with ParSNIP on the same training data
 python examples/snn_train.py data/plasticc_hats   # writes examples/models/snn_plasticc/
 python examples/classify_rubin_dia.py data/dp2_sim_sne --method snn --model examples/models/snn_plasticc
@@ -75,9 +78,13 @@ not reach (`nersc/prefetch.py`). By hand, the core steps are:
 .venv/bin/python -m ipykernel install --user --name dp2-sn-classification-td --display-name "dp2-sn-classification (td_env)"
 ```
 
-Slurm jobs for the long steps are in `nersc/` (`simulate_dp2`, `train_parsnip_classifier`, `validate`,
-`classify_edp2`); submit them from the repo root with your account and QOS:
-`sbatch -A <account> -q <qos> nersc/validate.sbatch`. `CLAUDE.md` describes this setup for Claude Code.
+Slurm jobs for the long steps are in `nersc/` (`simulate_dp2`, `train_parsnip_classifier`, `snn_train`,
+`validate`, `classify_edp2`); submit them from the repo root with your account and QOS, e.g.
+`sbatch -A <account> -q <qos> nersc/validate.sbatch [CATALOG] [CLASSIFIER] [SNN_MODEL]`. `validate` (on a
+simulation, with `evaluate.py`) and `classify_edp2` (on the real EDP2 catalog) run ParSNIP with `CLASSIFIER`
+(default `examples/models/plasticc_classifier.pkl`; skipped if the file doesn't exist) and the SuperNNova
+model directory `SNN_MODEL` (no default: without it only ParSNIP runs). The Fink models are not run by
+these jobs. `CLAUDE.md` describes this setup for Claude Code.
 
 Extras: `notebook` (Jupyter), `sim` (lightcurvelynx, sncosmo, dustmaps, mocpy; included in `desc-td-env`).
 SuperNNova's pretrained models are downloaded on first use (see below); SuperNNova itself is not a
@@ -340,6 +347,20 @@ h.train().export_snn("snn_plasticc")
 On our small toy simulation the Fink models performed poorly whichever way the input was prepared (e.g.
 `elasticc_ia` AUC 0.3–0.75, against 0.95 for ParSNIP with the PLAsTiCC classifier); validate on the DP2
 simulation before relying on them.
+
+On the DP2 simulation of the deep drilling fields (`simulate_dp2.py --ddf-only`, 1,000 each of SN Ia, II and
+Ib/c; no redshift input; SNIa vs non-SNIa at P(SNIa) ≥ 0.5):
+
+| model | AUC | efficiency | purity |
+|---|---|---|---|
+| SuperNNova A. Moller `elasticc_obsv51` (SNIa vs CC, `cosmo_quantile`, LSTM 64x3)¹ | 0.909 | 0.840 | 0.691 |
+| ParSNIP `plasticc_photoz` + PLAsTiCC classifier | 0.818 | 0.835 | 0.557 |
+| SuperNNova trained on PLAsTiCC (`snn_train.py`) | 0.565 | 0.183 | 0.433 |
+| Fink `elasticc_ia` | 0.484 | 0.113 | 0.354 |
+
+¹ A SuperNNova model directory trained on ELAsTiCC, used as written by SuperNNova. Its default input (time
+window around the maximum S/N) matters: with `--no-time-window` its AUC drops to 0.615, with
+`--detection-snr 3` to 0.837.
 
 ## Examples
 
