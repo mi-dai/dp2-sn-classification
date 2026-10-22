@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from hyrax_lightcurves import DATASET_CLASS, LightCurveHATSDataset
+from hyrax_lightcurves.training import class_weights, find_checkpoint  # noqa: F401 (find_checkpoint re-exported)
 from hyrax_snn.config import MODEL_NAME, SNN_BAND_MAP
 from hyrax_snn.features import build_features, select_observations
 from hyrax_snn.pretrained import load_settings
@@ -33,35 +34,6 @@ def training_dataset(h, catalog_path, dataset_settings: dict, redshift: str = "n
         h.set_config(f"data_set.LightCurveHATSDataset.{key}", value)
     h.set_config("data_set.LightCurveHATSDataset.require_redshift", redshift == "zspe")
     return LightCurveHATSDataset(h.config, data_location=str(catalog_path))
-
-
-def find_checkpoint(resume, results_dir) -> Path:
-    """The Hyrax checkpoint to resume training from.
-
-    `resume` is a checkpoint file, a Hyrax train run directory (its latest
-    ``checkpoint_epoch_N.pt``), or ``"latest"``: the newest train run under `results_dir`
-    that has one.
-    """
-
-    def latest_in(run_dir):
-        checkpoints = list(Path(run_dir).glob("checkpoint_epoch_*.pt"))
-        return max(checkpoints, key=lambda p: int(p.stem.rsplit("_", 1)[1])) if checkpoints else None
-
-    if str(resume) == "latest":
-        runs = sorted(Path(results_dir).glob("*-train-*"), key=lambda p: p.stat().st_mtime, reverse=True)
-        found = next((c for c in map(latest_in, runs) if c is not None), None)
-        if found is None:
-            raise FileNotFoundError(f"No Hyrax train run with a checkpoint under {results_dir}")
-        return found
-    path = Path(resume)
-    if path.is_dir():
-        found = latest_in(path)
-        if found is None:
-            raise FileNotFoundError(f"No checkpoint_epoch_*.pt in {path}")
-        return found
-    if not path.is_file():
-        raise FileNotFoundError(f"No checkpoint {path}")
-    return path
 
 
 def feature_lists(filters: list[str], redshift: str = "none") -> dict:
@@ -192,9 +164,7 @@ def new_model_dir(
 
     # Class weights for the cross-entropy: inverse class frequency, mean 1.
     labels = np.array([dataset.get_label_index(i) for i in used])
-    counts = np.bincount(labels, minlength=cli["nb_classes"]).astype(float)
-    weights = np.where(counts > 0, counts.sum() / (len(counts) * np.maximum(counts, 1)), 0.0)
-    cli["class_weights"] = [float(w) for w in weights]
-    cli["training_counts"] = {name: int(c) for name, c in zip(cli["class_names"], counts)}
+    cli["class_weights"], counts = class_weights(labels, cli["nb_classes"])
+    cli["training_counts"] = dict(zip(cli["class_names"], counts))
     (path / "cli_args.json").write_text(json.dumps(cli, indent=2))
     return load_settings(path)

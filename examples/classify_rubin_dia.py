@@ -1,6 +1,6 @@
-"""Classify a Rubin DIA HATS catalog with ParSNIP or SuperNNova.
+"""Classify a Rubin DIA HATS catalog with ParSNIP, SuperNNova or SCONE.
 
-    python examples/classify_rubin_dia.py --method {parsnip,snn} \\
+    python examples/classify_rubin_dia.py --method {parsnip,snn,scone} \\
         [/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats] \\
         [--model NAME] [--output PREDICTIONS.parquet] \\
         [--redshift-column redshift] [--mwebv-column mwebv] [--photoz-column redshift]
@@ -25,6 +25,11 @@ observations, and runs a pretrained model:
   ``--redshift-column`` the default is ``elasticc_broad`` (SN, Fast, Long, Periodic,
   NonPeriodic). Models are downloaded on first use (run once on a NERSC login node).
   ``--fink-exact`` approximates Fink's own input processing, for comparison.
+- ``--method scone``: class probabilities from a SCONE model directory trained with
+  ``scone_train.py`` (``--model DIR``, required: SCONE has no pretrained models). Fluxes are
+  rescaled to its training zeropoint; the GP heatmaps are made as in training, in parallel
+  (``--n-jobs``), and cached (``--heatmap-cache``). The model takes the redshift only if it was
+  trained with one (then ``--redshift-column`` is required).
 
 The output has one row per ``diaObjectId`` with ``ra``, ``dec``, ``method``, ``model``, ``redshift_input``
 (whether the model was given each object's redshift), ``p_<class>``
@@ -40,24 +45,29 @@ import numpy as np
 from hyrax import Hyrax
 
 import hyrax_parsnip
+import hyrax_scone
 import hyrax_snn
 
 DEFAULT_CATALOG = "/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats"
 RESULTS = Path(__file__).resolve().parent / "results"  # default output location (examples/results/)
+DEFAULT_HEATMAP_CACHE = Path(__file__).resolve().parent.parent / "data" / "scone_heatmaps"
 PARSNIP_MODELS = ["plasticc", "plasticc_photoz", "ps1"]
 PARSNIP_OPTIONS = ["classifier", "photoz_column", "photoz_error"]
 SNN_OPTIONS = ["fink_exact", "detection_snr", "no_time_window", "fix_clipped_min"]
+SCONE_OPTIONS = ["n_jobs", "heatmap_cache"]
+METHOD_OPTIONS = {"parsnip": PARSNIP_OPTIONS, "snn": SNN_OPTIONS, "scone": SCONE_OPTIONS}
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("catalog", nargs="?", default=DEFAULT_CATALOG, help="Rubin DIA HATS catalog")
-    parser.add_argument("--method", required=True, choices=["parsnip", "snn"], help="Model family")
+    parser.add_argument("--method", required=True, choices=list(METHOD_OPTIONS), help="Model family")
     parser.add_argument(
         "--model",
         help=f"Pretrained model. parsnip: {', '.join(PARSNIP_MODELS)} or a .pt path (default plasticc_photoz, or "
         f"plasticc with --redshift-column); snn: {', '.join(sorted(hyrax_snn.PRETRAINED_MODELS))} or a model "
-        "directory from snn_train.py (default elasticc_ia, or elasticc_broad with --redshift-column)",
+        "directory from snn_train.py (default elasticc_ia, or elasticc_broad with --redshift-column); scone: a "
+        "model directory from scone_train.py (required)",
     )
     parser.add_argument(
         "--output", help="Output table (.parquet/.ecsv; default examples/results/<method>_predictions.parquet)"
@@ -84,8 +94,14 @@ def parse_args():
     )
     snn_group.add_argument("--fix-clipped-min", action="store_true", help="Restore the unclipped normalization minimum")
 
+    scone_group = parser.add_argument_group("scone only")
+    scone_group.add_argument("--n-jobs", type=int, help="Processes for the GP heatmaps (default: all CPUs)")
+    scone_group.add_argument(
+        "--heatmap-cache", help="Heatmap cache directory (default data/scone_heatmaps; '' for none)"
+    )
+
     args = parser.parse_args()
-    other = SNN_OPTIONS if args.method == "parsnip" else PARSNIP_OPTIONS
+    other = [name for method, names in METHOD_OPTIONS.items() if method != args.method for name in names]
     used = [f"--{name.replace('_', '-')}" for name in other if getattr(args, name) not in (None, False)]
     if used:
         parser.error(f"{', '.join(used)} can't be used with --method {args.method}")
@@ -94,7 +110,18 @@ def parse_args():
     if args.classifier:
         args.classifier_info = check_classifier(parser, args)
 
-    if args.model is None:
+    if args.method == "scone":
+        if args.model is None:
+            parser.error("--method scone needs --model, a model directory from scone_train.py")
+        try:
+            info = hyrax_scone.load_model_info(args.model)
+        except FileNotFoundError as error:
+            parser.error(str(error))
+        if info["with_z"] and not args.redshift_column:
+            parser.error(f"The SCONE model {args.model} takes the redshift: pass --redshift-column")
+        if not info["with_z"] and args.redshift_column:
+            parser.error(f"The SCONE model {args.model} takes no redshift: drop --redshift-column")
+    elif args.model is None:
         if args.method == "parsnip":
             args.model = "plasticc" if args.redshift_column else "plasticc_photoz"
         else:
@@ -240,9 +267,30 @@ def run_snn(args):
     return predictions, takes_redshift(h)
 
 
+def run_scone(args):
+    """Class probabilities from a SCONE model directory."""
+    h = new_hyrax(args)
+    settings = catalog_settings(hyrax_scone.rubin_dia_settings(args.model), args)
+    cache = DEFAULT_HEATMAP_CACHE if args.heatmap_cache is None else args.heatmap_cache
+    settings["scone"] = {"cache_dir": str(cache) if cache else False}
+    if args.n_jobs is not None:
+        settings["scone"]["n_jobs"] = args.n_jobs
+    hyrax_scone.configure(h, args.catalog, model_dir=args.model, dataset_settings=settings)
+
+    predictions = hyrax_scone.load_predictions(h.infer())
+    class_names = [c for c in predictions.colnames if c not in ("object_id", "predicted_class")]
+    for name in class_names:
+        predictions.rename_column(name, f"p_{name}")
+    print(f"{len(predictions)} objects with enough good observations; {(predictions['predicted_class'] != '').sum()} classified")
+    return predictions, takes_redshift(h)
+
+
+RUNNERS = {"parsnip": run_parsnip, "snn": run_snn, "scone": run_scone}
+
+
 def main():
     args = parse_args()
-    predictions, redshift_input = run_parsnip(args) if args.method == "parsnip" else run_snn(args)
+    predictions, redshift_input = RUNNERS[args.method](args)
 
     # Sky position of each object, from the catalog.
     coords = hyrax_parsnip.catalog_metadata(args.catalog, ["ra", "dec"], id_column="diaObjectId")

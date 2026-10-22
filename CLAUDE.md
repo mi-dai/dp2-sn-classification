@@ -1,8 +1,8 @@
 # Notes for Claude Code
 
-Supernova classification of Rubin DP2 transients with ParSNIP (`src/hyrax_parsnip`) and SuperNNova
-(`src/hyrax_snn`) run through Hyrax on HATS catalogs, both reading them with the shared dataset in
-`src/hyrax_lightcurves`. README.md has the full documentation.
+Supernova classification of Rubin DP2 transients with ParSNIP (`src/hyrax_parsnip`), SuperNNova
+(`src/hyrax_snn`) and SCONE (`src/hyrax_scone`) run through Hyrax on HATS catalogs, all reading them with the
+shared dataset in `src/hyrax_lightcurves` (which also holds the shared training helpers). README.md has the full documentation.
 
 ## Where things happen
 - Code is developed here on NERSC (since 2026-10-22; previously on the maintainer's Mac). Fix bugs found in
@@ -18,7 +18,7 @@ Supernova classification of Rubin DP2 transients with ParSNIP (`src/hyrax_parsni
 - `nersc/prefetch.py` downloads what compute nodes may not reach: SuperNNova's pretrained models
   (`~/.cache/hyrax_snn`), the PLAsTiCC files (`data/plasticc_raw`, ~330 MB), and the simulation's passbands and
   templates; it checks the SFD dust map. Each step reports and continues on failure.
-- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/python -m pytest -q` (36 tests).
+- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/python -m pytest -q` (46 tests).
 - `desc-td-env` path is set in `nersc/setup_env.sh` (`TD_PYTHON`, overridable).
 
 ## Running jobs
@@ -30,8 +30,9 @@ Submit from the repo root, passing the user's account and QOS (not stored in the
 | `simulate_dp2.sbatch [OUT] [N_PER_CLASS]` | DP2 validation simulation (SN Ia/II/Ib/c, DP2 DIA schema + truth) | `data/dp2_sim_sne` |
 | `train_parsnip_classifier.sbatch` | PLAsTiCC (train + test DDF, 40,774 objects) → ParSNIP features → LightGBM (SNIa vs non-SNIa) | `examples/models/plasticc_classifier.{pkl,json}` |
 | `snn_train.sbatch` (optional) | PLAsTiCC (same catalog) → SuperNNova trained with Hyrax (SNIa vs non-SNIa, no redshift, 90 epochs) | `examples/models/snn_plasticc/` (time limit hit: resubmit with `--resume latest`) |
-| `validate.sbatch [CATALOG] [CLASSIFIER] [SNN_MODEL]` | ParSNIP + the SuperNNova model directory `SNN_MODEL` (no default; without it only ParSNIP) on the simulation + `evaluate.py`; the Fink `elasticc_ia`/`elasticc_broad` are not validated any more | `examples/results/validate/` |
-| `classify_edp2.sbatch [CATALOG] [CLASSIFIER] [SNN_MODEL]` | ParSNIP + the SuperNNova model directory `SNN_MODEL` on the real EDP2 catalog, no redshift; same `SNN_MODEL` rule, no Fink `elasticc_ia` | `examples/results/edp2/` |
+| `scone_train.sbatch` | PLAsTiCC (same catalog) → GP heatmaps (cached in `data/scone_heatmaps/`) → SCONE CNN trained with Hyrax (SNIa vs non-SNIa, no redshift, 400 epochs) | `examples/models/scone_plasticc/` (time limit hit: resubmit with `--resume latest`) |
+| `validate.sbatch [CATALOG] [CLASSIFIER] [SNN_MODEL] [SCONE_MODEL]` | ParSNIP + the SuperNNova model directory `SNN_MODEL` + the SCONE model directory `SCONE_MODEL` (no defaults; each skipped if not given, `""` to skip SNN but run SCONE) on the simulation + `evaluate.py`; the Fink `elasticc_ia`/`elasticc_broad` are not validated any more | `examples/results/validate/` |
+| `classify_edp2.sbatch [CATALOG] [CLASSIFIER] [SNN_MODEL] [SCONE_MODEL]` | the same models on the real EDP2 catalog, no redshift; no Fink `elasticc_ia` | `examples/results/edp2/` |
 
 Short checks can run interactively on a login node; anything long goes through Slurm. The demo notebook
 `examples/demo_workflow.ipynb` (kernel `dp2-sn-classification (td_env)`) uses the same `data/` paths and the
@@ -58,6 +59,13 @@ classifier in `examples/models/`. If the classifier is missing it trains it in t
   (`snn_train.py`) is optional, for comparing with ParSNIP on the same training data; a trained model is an
   ordinary SuperNNova model directory, used with `classify_rubin_dia.py --method snn --model DIR` (its
   `cli_args.json` records the flux zeropoint, so DP2 nJy fluxes are rescaled to match).
+- SCONE: no published weights, so it is always trained here (`scone_train.py`, on PLAsTiCC train + DDF, no
+  redshift, SNIa vs non-SNIa). Faithful PyTorch port of its CNN; deliberate differences from upstream: the
+  heatmap window is centred on the S/N²-weighted detection time (not the true peak), MW extinction multiplies
+  the flux by 10^(0.4 A_λ) (upstream adds A_λ), heatmaps divided by max |mean| (upstream: max mean, which blows
+  up for negative-flux variables), std channel capped at 2 (outliers broke BatchNorm), class weights instead of downsampling, softmax output.
+  A model directory (`scone_model.json`, `model.pt`) records its heatmap settings and flux zeropoint, which
+  `classify_rubin_dia.py --method scone --model DIR` reuses.
 - SuperNNova's input options (`--detection-snr`, `--no-time-window`, `--fink-exact`) are still being chosen by
   comparing them on the simulation; the defaults are a starting point.
 

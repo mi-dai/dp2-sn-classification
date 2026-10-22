@@ -8,59 +8,12 @@ import torch.nn as nn
 from hyrax.models import hyrax_model
 from hyrax.models.model_registry import _torch_save
 
+from hyrax_lightcurves.training import ValidationScheduler, ValidationTracking, move_optimizer_state
 from hyrax_snn.features import build_features, select_observations
 from hyrax_snn.pretrained import resolve, weights_file
 from hyrax_snn.rnn import VanillaRNN
 
 logger = logging.getLogger(__name__)
-
-
-class ValidationPlateauScheduler:
-    """ReduceLROnPlateau for Hyrax's once-per-epoch ``scheduler.step()``, on the validation loss.
-
-    Hyrax passes no loss to ``step()`` and steps before validating, so this uses the model's
-    latest full validation loss (from the previous epoch; ``validate_post_epoch``), or the
-    training loss of the epoch when there is no validation split.
-    """
-
-    def __init__(self, scheduler, model):
-        self.scheduler = scheduler
-        self.model = model
-
-    def get_last_lr(self):
-        return [group["lr"] for group in self.scheduler.optimizer.param_groups]
-
-    def step(self):
-        loss = self.model._last_validation_loss
-        self.scheduler.step(self.model._epoch_loss if loss is None else loss)
-        self.model._epoch_loss = 0.0
-        self.model._epochs_trained += 1
-
-    def state_dict(self):
-        # Hyrax saves the scheduler in each checkpoint, so the model's training state (validation
-        # history and best weights) rides along and is restored on `train.resume`.
-        model = self.model
-        return {
-            "plateau": self.scheduler.state_dict(),
-            "epochs_trained": model._epochs_trained,
-            "validation_history": list(model.validation_history),
-            "last_validation_loss": model._last_validation_loss,
-            "best_state": model._best_state,
-        }
-
-    def load_state_dict(self, state_dict):
-        if "plateau" not in state_dict:  # a plain ReduceLROnPlateau state
-            self.scheduler.load_state_dict(state_dict)
-            return
-        self.scheduler.load_state_dict(state_dict["plateau"])
-        self.model._epochs_trained = state_dict["epochs_trained"]
-        history = [tuple(h) for h in state_dict["validation_history"]]
-        # Hyrax saves the checkpoint before validating its last epoch: that validation is lost.
-        history += [(np.nan, np.nan)] * (self.model._epochs_trained - len(history))
-        self.model.validation_history = history
-        self.model._last_validation_loss = state_dict["last_validation_loss"]
-        best = state_dict["best_state"]
-        self.model._best_state = {k: v.cpu() for k, v in best.items()} if best else None
 
 
 # Written next to every saved weights file (including each infer results dir) so the
@@ -75,7 +28,7 @@ def _to_numpy(value) -> np.ndarray:
 
 
 @hyrax_model
-class HyraxSNN(nn.Module):
+class HyraxSNN(ValidationTracking, nn.Module):
     """Hyrax model running a SuperNNova classifier.
 
     The model (``model.HyraxSNN.pretrained``) is a built-in Fink ELAsTiCC model name
@@ -157,13 +110,8 @@ class HyraxSNN(nn.Module):
         plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, factor=0.1, patience=10, min_lr=float(settings["learning_rate"]) * 1e-3
         )
-        self.scheduler = ValidationPlateauScheduler(plateau, self)
-        self._epoch_loss = 0.0
-        self._validation_sum = self._validation_correct = self._validation_count = 0.0
-        self._last_validation_loss = None
-        self.validation_history = []  # (loss, accuracy) of each validation epoch, over all batches
-        self._epochs_trained = 0
-        self._best_state = None
+        self.scheduler = ValidationScheduler(self, plateau)
+        self._init_validation_tracking()
 
     @property
     def uses_redshift(self) -> bool:
@@ -172,17 +120,16 @@ class HyraxSNN(nn.Module):
     def _load_snn_state(self, state):
         self.rnn.load_state_dict(state)
 
+    def _trained_module(self):
+        return self.rnn
+
     def _device(self):
         if self.device_setting == "hyrax":
             device = next(self.parameters()).device
         else:
             self.rnn.to(self.device_setting)
             device = torch.device(self.device_setting)
-        # Hyrax loads a resumed checkpoint's optimizer state onto its own device (e.g. MPS/CUDA).
-        for param_state in self.optimizer.state.values():
-            for key, value in param_state.items():
-                if torch.is_tensor(value) and value.device != device:
-                    param_state[key] = value.to(device)
+        move_optimizer_state(self.optimizer, device)
         return device
 
     def forward(self, batch):
@@ -266,7 +213,7 @@ class HyraxSNN(nn.Module):
             return {"loss": 0.0}
         loss.backward()
         self.optimizer.step()
-        self._epoch_loss += loss.item() * count
+        self._add_training_loss(loss.item(), count)
         return {"loss": loss.item(), "accuracy": accuracy}
 
     def validate_batch(self, batch):
@@ -275,40 +222,15 @@ class HyraxSNN(nn.Module):
             loss, count, accuracy = self._loss(batch, augment=False)
         if loss is None:
             return {"loss": 0.0}
-        self._validation_sum += loss.item() * count
-        self._validation_correct += accuracy * count
-        self._validation_count += count
+        self._add_validation(loss.item(), count, accuracy)
         return {"loss": loss.item(), "accuracy": accuracy}
-
-    def validate_post_epoch(self):
-        """Hyrax hook after each validation pass: record the loss over all validation objects
-        (Hyrax only reports the last batch) and keep the best weights so far."""
-        if not self._validation_count:
-            return
-        loss = self._validation_sum / self._validation_count
-        accuracy = self._validation_correct / self._validation_count
-        self._validation_sum = self._validation_correct = self._validation_count = 0.0
-        self._last_validation_loss = loss
-        self.validation_history.append((loss, accuracy))
-        if loss <= np.nanmin([h[0] for h in self.validation_history]):
-            self._best_state = {k: v.detach().cpu().clone() for k, v in self.rnn.state_dict().items()}
-        logger.info(f"Validation epoch {len(self.validation_history)}: loss {loss:.4f}, accuracy {accuracy:.3f}")
-
-    @property
-    def best_epoch(self):
-        """Validation epoch (1-based) with the lowest loss, or None without validation."""
-        losses = np.array([h[0] for h in self.validation_history], dtype=float)
-        if not np.isfinite(losses).any():
-            return None
-        return int(np.nanargmin(losses)) + 1
 
     def export_snn(self, model_dir=None, best=True):
         """Write the weights as ``model.pt`` (a SuperNNova VanillaRNN state dict) into the model
         directory, so it can be used with ``pretrained=<directory>``. With `best` (and a
         validation split), the weights of the epoch with the lowest validation loss, as SuperNNova."""
         model_dir = Path(model_dir) if model_dir else self.snn.model_dir
-        state = self._best_state if best and self._best_state is not None else self.rnn.state_dict()
-        torch.save({k: v.cpu() for k, v in state.items()}, model_dir / "model.pt")
+        torch.save(self._export_state(best), model_dir / "model.pt")
         return model_dir
 
 

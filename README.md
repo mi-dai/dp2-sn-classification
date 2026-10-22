@@ -2,20 +2,20 @@
 
 Photometric classification of Rubin DP2 transients with pretrained models run through
 [Hyrax](https://hyrax.readthedocs.io), on light curves stored in [HATS](https://hats.readthedocs.io)
-catalogs. Two classifiers are available, each as its own package in the `dp2-sn-classification` distribution:
+catalogs. Three classifiers are available, each as its own package in the `dp2-sn-classification` distribution:
 
-| | ParSNIP (`hyrax_parsnip`) | SuperNNova (`hyrax_snn`) |
-|---|---|---|
-| Model | [ParSNIP](https://parsnip.readthedocs.io) generative model + LightGBM classifier | [SuperNNova](https://supernnova.readthedocs.io) recurrent network |
-| Pretrained | `plasticc`, `plasticc_photoz`, `ps1` (light-curve model only) | Fink's ELAsTiCC classifiers (complete) |
-| Training needed | the LightGBM classifier, once (here: on PLAsTiCC) | none; optional training (e.g. on PLAsTiCC) |
-| Without redshift | `plasticc_photoz` (predicts the redshift) | `elasticc_ia`, `SN_vs_other` |
-| With redshift | `plasticc` | `elasticc_broad`, `*_vs_other` |
-| Classes | what the classifier is trained on (here: SNIa vs non-SNIa by default) | fixed by the model (e.g. SNIa/other; SN/Fast/Long/Periodic/NonPeriodic), or what it is trained on |
-| Also gives | latent features, predicted redshift; optional fine-tuning | |
+| | ParSNIP (`hyrax_parsnip`) | SuperNNova (`hyrax_snn`) | SCONE (`hyrax_scone`) |
+|---|---|---|---|
+| Model | [ParSNIP](https://parsnip.readthedocs.io) generative model + LightGBM classifier | [SuperNNova](https://supernnova.readthedocs.io) recurrent network | [SCONE](https://github.com/helenqu/scone) CNN on Gaussian-process heatmaps (PyTorch port) |
+| Pretrained | `plasticc`, `plasticc_photoz`, `ps1` (light-curve model only) | Fink's ELAsTiCC classifiers (complete) | none published |
+| Training needed | the LightGBM classifier, once (here: on PLAsTiCC) | none; optional training (e.g. on PLAsTiCC) | the whole model (here: on PLAsTiCC) |
+| Without redshift | `plasticc_photoz` (predicts the redshift) | `elasticc_ia`, `SN_vs_other` | a model trained without it (default) |
+| With redshift | `plasticc` | `elasticc_broad`, `*_vs_other` | a model trained with it (`--redshift-column`) |
+| Classes | what the classifier is trained on (here: SNIa vs non-SNIa by default) | fixed by the model (e.g. SNIa/other; SN/Fast/Long/Periodic/NonPeriodic), or what it is trained on | what it is trained on (SNIa vs non-SNIa by default) |
+| Also gives | latent features, predicted redshift; optional fine-tuning | | |
 
-Both read the same catalogs with the same dataset class (`hyrax_lightcurves`, a third package shared by the
-two) and Rubin DIA settings, and the example scripts run either one with `--method {parsnip,snn}`.
+All read the same catalogs with the same dataset class (`hyrax_lightcurves`, a package shared by the three)
+and Rubin DIA settings, and the example scripts run any of them with `--method {parsnip,snn,scone}`.
 
 ## Workflow
 
@@ -43,9 +43,15 @@ python examples/classify_rubin_dia.py data/dp2_sim_sne --method snn --model /pat
 python examples/snn_train.py data/plasticc_hats   # writes examples/models/snn_plasticc/
 python examples/classify_rubin_dia.py data/dp2_sim_sne --method snn --model examples/models/snn_plasticc
 
+# SCONE: train on PLAsTiCC (no published weights), then classify and score
+python examples/scone_train.py data/plasticc_hats   # writes examples/models/scone_plasticc/
+python examples/classify_rubin_dia.py data/dp2_sim_sne --method scone --model examples/models/scone_plasticc
+python examples/evaluate.py data/dp2_sim_sne examples/results/scone_predictions.parquet
+
 # Real data: classify_rubin_dia.py defaults to the EDP2 catalog
 python examples/classify_rubin_dia.py --method parsnip --classifier examples/models/plasticc_classifier.pkl
 python examples/classify_rubin_dia.py --method snn
+python examples/classify_rubin_dia.py --method scone --model examples/models/scone_plasticc
 ```
 
 `examples/demo_workflow.ipynb` walks through the same steps interactively and compares both models.
@@ -79,16 +85,16 @@ not reach (`nersc/prefetch.py`). By hand, the core steps are:
 ```
 
 Slurm jobs for the long steps are in `nersc/` (`simulate_dp2`, `train_parsnip_classifier`, `snn_train`,
-`validate`, `classify_edp2`); submit them from the repo root with your account and QOS, e.g.
-`sbatch -A <account> -q <qos> nersc/validate.sbatch [CATALOG] [CLASSIFIER] [SNN_MODEL]`. `validate` (on a
-simulation, with `evaluate.py`) and `classify_edp2` (on the real EDP2 catalog) run ParSNIP with `CLASSIFIER`
-(default `examples/models/plasticc_classifier.pkl`; skipped if the file doesn't exist) and the SuperNNova
-model directory `SNN_MODEL` (no default: without it only ParSNIP runs). The Fink models are not run by
-these jobs. `CLAUDE.md` describes this setup for Claude Code.
+`scone_train`, `validate`, `classify_edp2`); submit them from the repo root with your account and QOS, e.g.
+`sbatch -A <account> -q <qos> nersc/validate.sbatch [CATALOG] [CLASSIFIER] [SNN_MODEL] [SCONE_MODEL]`.
+`validate` (on a simulation, with `evaluate.py`) and `classify_edp2` (on the real EDP2 catalog) run ParSNIP
+with `CLASSIFIER` (default `examples/models/plasticc_classifier.pkl`; skipped if the file doesn't exist), the
+SuperNNova model directory `SNN_MODEL` and the SCONE model directory `SCONE_MODEL` (no defaults: each is
+skipped if not given; pass `""` for `SNN_MODEL` to run SCONE only). The Fink models are not run by these jobs. `CLAUDE.md` describes this setup for Claude Code.
 
 Extras: `notebook` (Jupyter), `sim` (lightcurvelynx, sncosmo, dustmaps, mocpy; included in `desc-td-env`).
 SuperNNova's pretrained models are downloaded on first use (see below); SuperNNova itself is not a
-dependency.
+dependency, nor is SCONE (its CNN and heatmaps are ported; the GP fits use `george`).
 
 ## Data
 
@@ -362,12 +368,80 @@ Ib/c; no redshift input; SNIa vs non-SNIa at P(SNIa) ≥ 0.5):
 window around the maximum S/N) matters: with `--no-time-window` its AUC drops to 0.615, with
 `--detection-snr 3` to 0.837.
 
+## SCONE (`hyrax_scone`)
+
+`hyrax_scone` runs [SCONE](https://github.com/helenqu/scone) (Qu et al. 2021,
+[arXiv:2106.04370](https://arxiv.org/abs/2106.04370)) through Hyrax. SCONE turns each light curve into a 2-D
+"heatmap": a Gaussian process (Matern-3/2 in time and wavelength, fit with `george`) predicted on 32
+wavelengths (3000–10100 Å) × 180 times, with the GP mean and standard deviation as two channels, divided by the
+maximum |mean|. A small CNN classifies the heatmaps. SCONE is TensorFlow and publishes no trained weights,
+so the CNN is ported to PyTorch (`hyrax_scone.cnn.SconeCNN`, same layers and Keras defaults; tests check the
+parameter count against the Keras model) and every model is trained here.
+
+Differences from upstream SCONE:
+- **Time window.** Upstream centres the 180 days (−30…+150) on the simulation's true peak. Real data have none,
+  so here the window is centred on the S/N²-weighted time of the detections (flux/fluxerr > 5), SCONE's own
+  data-based peak estimate, in training and inference alike.
+- **Milky Way extinction.** Upstream adds A_λ (in magnitudes) to the GP flux; here the flux is multiplied by
+  10^(0.4 A_λ) (`hyrax_scone.heatmaps.extinction_correct`; same CCM89 A_λ).
+- **Normalization.** Upstream divides both channels by the maximum of the GP mean; here by the maximum |mean|.
+  For supernovae (positive peak) they agree, but for variables with mostly negative difference flux (about 12%
+  of PLAsTiCC) upstream's maximum is a small positive number and heatmap values reach ±1e8 and beyond, which
+  stopped training altogether in our first test.
+- **Uncertainty cap.** The std channel is capped at `max_std` (default 2, twice the largest |flux|). It is
+  ~0.2 for most objects but reaches 1e14 for noise-dominated light curves, and such values wreck BatchNorm's
+  running statistics: the trained network then gives the same output for every object.
+- **Class balance.** Upstream downsamples every class to the smallest; here all objects are kept and the
+  cross-entropy is weighted by inverse class frequency.
+- **Output.** One logit per class (softmax) instead of a single sigmoid for binary models: the same function of
+  the features, and one code path for any number of classes.
+- Light curves the GP can't fit give no heatmap and are not classified (about 1.5% of PLAsTiCC).
+
+The heatmap constants are in SCONE's FLUXCAL units (zeropoint 27.5), so Rubin nJy fluxes are rescaled
+(`RUBIN_DIA_SETTINGS`, or `rubin_dia_settings(model_dir)` for the model's training zeropoint). The heatmaps are
+made when the dataset (`SconeHATSDataset`, a `LightCurveHATSDataset` with a `heatmap` field) is created, with
+the GP fits in parallel (`[data_set.SconeHATSDataset] n_jobs`, default all CPUs), and saved in `cache_dir`
+(one `.npy` per catalog and settings; the scripts use `data/scone_heatmaps/`), so training epochs, resumed runs
+and later classification reuse them. A fit takes 0.2–2 s; the PLAsTiCC training set (7,848 objects) takes
+about 1.5 min on an Apple M-series CPU.
+
+### Training SCONE
+
+```bash
+python examples/scone_train.py data/plasticc_hats [--output examples/models/scone_plasticc] [--classes {ia,dp2,all}] \
+    [--redshift-column redshift] [--epochs 400] [--batch-size 32] [--n-jobs 0] [--resume latest]
+```
+
+SCONE's training settings: Adam with a constant learning rate of 5e-5, batch 32, 400 epochs (as in the SCONE
+papers). The held-out fraction (`--validate-fraction`, default 0.1), the export of the best-validation-loss
+weights, `--resume` and the class schemes work as for SuperNNova (below). About 7 s per epoch for the PLAsTiCC
+training set on an Apple M-series CPU; `nersc/scone_train.sbatch` trains on the training set + DDF at NERSC.
+On the PLAsTiCC training set alone (7,848 objects, 10% held out, SNIa vs non-SNIa, no redshift), 20 epochs
+reach a validation accuracy of 0.837 (SNIa recall 0.846, non-SNIa 0.833), still improving.
+
+A model directory holds `scone_model.json` (classes, class weights, whether it takes the redshift, the heatmap
+settings, `flux_zeropoint`, a training summary) and `model.pt` (the `SconeCNN` weights). Classification makes
+heatmaps with the model's settings:
+
+```python
+from hyrax import Hyrax
+import hyrax_scone
+
+h = Hyrax()
+settings = hyrax_scone.rubin_dia_settings(model_dir)            # Rubin DIA columns, nJy -> the model's zeropoint
+settings["scone"] = {"cache_dir": "data/scone_heatmaps"}         # [data_set.SconeHATSDataset] overrides
+hyrax_scone.configure(h, catalog, model_dir=model_dir, dataset_settings=settings)
+predictions = hyrax_scone.load_predictions(h.infer())            # object_id, one probability per class, predicted_class
+```
+
 ## Examples
 
-Shared by both classifiers:
-- `examples/classify_rubin_dia.py --method {parsnip,snn}`: classify a Rubin DIA catalog (default: the EDP2
-  catalog). `--model` picks the pretrained model (snn: also a model directory from `snn_train.py`), `--redshift-column` is for models with redshift input;
-  parsnip: `--classifier` for class probabilities; snn: `--fink-exact` and the input options.
+Shared by the classifiers:
+- `examples/classify_rubin_dia.py --method {parsnip,snn,scone}`: classify a Rubin DIA catalog (default: the EDP2
+  catalog). `--model` picks the pretrained model (snn: also a model directory from `snn_train.py`; scone: a model
+  directory from `scone_train.py`, required), `--redshift-column` is for models with redshift input;
+  parsnip: `--classifier` for class probabilities; snn: `--fink-exact` and the input options; scone: `--n-jobs`
+  and `--heatmap-cache` for the GP heatmaps.
 - `examples/evaluate.py`: score predictions from either method against a simulated catalog's truth
   (SN Ia vs non-Ia confusion matrix, or predicted class per true type for models without an SNIa class; recall
   vs S/N and redshift, P(target) and ROC, light curves; predicted vs true redshift and latent space for ParSNIP).
@@ -393,11 +467,14 @@ ParSNIP only:
 SuperNNova only:
 - `examples/snn_train.py`: train SuperNNova on a labeled catalog (optional; see above).
 
+SCONE only:
+- `examples/scone_train.py`: train SCONE on a labeled catalog (see above).
+
 ## Notes
 
-- **Device.** On Apple silicon, Hyrax picks MPS, which neither model is tested on. Both keep the model on the
-  CPU by default (`model.HyraxParsnip.device` / `model.HyraxSNN.device = "cpu"`); set `"hyrax"` to follow
-  Hyrax's device choice (e.g. CUDA).
+- **Device.** On Apple silicon, Hyrax picks MPS, which none of the models is tested on. All keep the model on the
+  CPU by default (`model.HyraxParsnip.device` / `model.HyraxSNN.device` / `model.HyraxSCONE.device = "cpu"`);
+  set `"hyrax"` to follow Hyrax's device choice (e.g. CUDA).
 - **LightGBM threads** (ParSNIP classifier). On macOS, torch and LightGBM load separate OpenMP runtimes, and
   multithreaded LightGBM segfaults once torch has run. The classifier helpers therefore run LightGBM
   single-threaded (`n_jobs=1`). ParSNIP feature tables are small, so this is cheap.
@@ -419,4 +496,7 @@ The tests build a small synthetic nested HATS catalog and cover:
   and reuse as a model directory, and the Fink models
   against SuperNNova itself (`tests/test_snn_reference.py`; skipped unless `supernnova` is installed:
   `.venv/bin/pip install --no-deps supernnova==3.0.51 natsort seaborn`)
+- SCONE: the CNN port (shapes, Keras parameter count, the transposed layout), the extinction law against
+  upstream's code, heatmaps, the heatmap cache, and training (with resume), export and inference with and
+  without redshift
 - the PLAsTiCC converter (`examples/plasticc_to_hats.py`)

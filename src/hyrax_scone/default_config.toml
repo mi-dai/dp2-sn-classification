@@ -1,0 +1,35 @@
+# Default configuration for hyrax_scone. Hyrax merges this file automatically whenever
+# the runtime config references a `hyrax_scone.*` class. The light curves are read as in
+# hyrax_lightcurves' LightCurveHATSDataset (see hyrax_lightcurves/default_config.toml).
+
+[model.HyraxSCONE]
+# SCONE model directory (scone_model.json, and model.pt once trained); see
+# hyrax_scone.new_model_dir and examples/scone_train.py. SCONE publishes no trained weights.
+model_dir = false
+
+# PyTorch device ("cpu", "cuda", ...), or "hyrax" to follow Hyrax's device choice.
+device = "cpu"
+
+# Training: Adam with a constant learning rate, as SCONE.
+learning_rate = 5e-5
+
+[data_set.SconeHATSDataset]
+# GP heatmap settings (SCONE's values; see hyrax_scone/heatmaps.py). A model directory records
+# the settings it was trained with, and hyrax_scone.configure uses them for inference.
+n_wavelengths = 32
+n_times = 180
+wavelength_range = [3000.0, 10100.0]
+# Days before and after the light curve's peak time (the S/N^2-weighted time of the detections).
+time_window = [-30.0, 150.0]
+# Detections for the peak time: flux / fluxerr above this.
+peak_detection_snr = 5.0
+# Initial GP time scale (days).
+time_scale_guess = 20.0
+# Cap of the std channel (in units of the largest |GP flux|): noise-dominated light curves reach
+# 1e14, which wrecks the CNN's BatchNorm statistics.
+max_std = 2.0
+
+# Where heatmaps are saved and reused (one .npy per catalog and settings); false = not saved.
+cache_dir = false
+# Processes for the GP fits; 0 = all CPUs available.
+n_jobs = 0

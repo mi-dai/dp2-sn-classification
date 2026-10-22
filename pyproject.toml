@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dp2-sn-classification"
 version = "0.1.0"
-description = "Classify Rubin DP2 transients with ParSNIP and SuperNNova through Hyrax on HATS light-curve catalogs"
+description = "Classify Rubin DP2 transients with ParSNIP, SuperNNova and SCONE through Hyrax on HATS light-curve catalogs"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,6 +16,7 @@ dependencies = [
     "nested-pandas",
     "torch",
     "lightgbm",
+    "george",
     "numpy",
     "astropy",
 ]
@@ -33,6 +34,7 @@ where = ["src"]
 hyrax_lightcurves = ["*.toml"]
 hyrax_parsnip = ["*.toml"]
 hyrax_snn = ["*.toml"]
+hyrax_scone = ["*.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
