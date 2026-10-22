@@ -30,8 +30,8 @@ Submit from the repo root, passing the user's account and QOS (not stored in the
 | `simulate_dp2.sbatch [OUT] [N_PER_CLASS]` | DP2 validation simulation (SN Ia/II/Ib/c, DP2 DIA schema + truth) | `data/dp2_sim_sne` |
 | `train_parsnip_classifier.sbatch` | PLAsTiCC (train + test DDF, 40,774 objects) → ParSNIP features → LightGBM (SNIa vs non-SNIa) | `examples/models/plasticc_classifier.{pkl,json}` |
 | `snn_train.sbatch` (optional) | PLAsTiCC (same catalog) → SuperNNova trained with Hyrax (SNIa vs non-SNIa, no redshift, 90 epochs) | `examples/models/snn_plasticc/` (time limit hit: resubmit with `--resume latest`) |
-| `validate.sbatch [CATALOG] [CLASSIFIER] [SNN_MODEL]` | both models on the simulation + `evaluate.py`; also the trained SuperNNova model if `SNN_MODEL` (default `examples/models/snn_plasticc`) exists | `examples/results/validate/` |
-| `classify_edp2.sbatch [CATALOG] [CLASSIFIER] [SNN_MODEL]` | both models on the real EDP2 catalog, no redshift; same `SNN_MODEL` rule | `examples/results/edp2/` |
+| `validate.sbatch [CATALOG] [CLASSIFIER] [SNN_MODEL]` | ParSNIP + the SuperNNova model directory `SNN_MODEL` (no default; without it only ParSNIP) on the simulation + `evaluate.py`; the Fink `elasticc_ia`/`elasticc_broad` are not validated any more | `examples/results/validate/` |
+| `classify_edp2.sbatch [CATALOG] [CLASSIFIER] [SNN_MODEL]` | ParSNIP + the SuperNNova model directory `SNN_MODEL` on the real EDP2 catalog, no redshift; same `SNN_MODEL` rule, no Fink `elasticc_ia` | `examples/results/edp2/` |
 
 Short checks can run interactively on a login node; anything long goes through Slurm. The demo notebook
 `examples/demo_workflow.ipynb` (kernel `dp2-sn-classification (td_env)`) uses the same `data/` paths and the
