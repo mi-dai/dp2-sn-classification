@@ -2,7 +2,7 @@ from pathlib import Path
 
 from hyrax_lightcurves.config import DATASET_CLASS, MODEL_FIELDS, NJY_TO_ZP27_5
 from hyrax_lightcurves.config import RUBIN_DIA_SETTINGS as LIGHTCURVE_RUBIN_DIA_SETTINGS
-from hyrax_snn.pretrained import resolve
+from hyrax_snn.pretrained import resolve, weights_file
 
 MODEL_NAME = "hyrax_snn.model.HyraxSNN"
 
@@ -74,8 +74,8 @@ def configure(
     snn = resolve(str(pretrained), cache_dir=settings["cache_dir"] or None)
     # Models that take a redshift input need one per object; the others don't.
     h.set_config("data_set.LightCurveHATSDataset.require_redshift", snn.redshift != "none")
-    # A new model (no model.pt yet) is trained first; inference then uses the latest training run.
-    weights = snn.model_dir / "model.pt"
+    # A new model (no weights yet) is trained first; inference then uses the latest training run.
+    weights = weights_file(snn.model_dir)
     h.set_config("infer.model_weights_file", str(weights) if weights.exists() else False)
     return h
 

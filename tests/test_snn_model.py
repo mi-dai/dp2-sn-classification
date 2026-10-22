@@ -150,6 +150,38 @@ def test_detection_snr_and_window_options_run(hyrax_instance, hats_catalog, mode
     assert np.isfinite(np.asarray(predictions["class0"])).sum() > 0
 
 
+def snana_style_copy(model_dir, path):
+    """`model_dir` as SuperNNova writes it for SNANA simulations: LSST-<f> filter names, weights in
+    <model name>.pt, `sntypes` instead of class names."""
+    cli = json.loads((model_dir / "cli_args.json").read_text())
+    prefixed = lambda name: name.replace("FLUXCALERR_", "FLUXCALERR_LSST-").replace("FLUXCAL_", "FLUXCAL_LSST-")  # noqa: E731
+    combos = {"".join(c): "".join(f"LSST-{f}" for f in c) for n in range(1, 7) for c in itertools.combinations(FILTERS, n)}
+    rename = lambda name: combos.get(name, prefixed(name))  # noqa: E731
+    for key in ("all_features", "training_features", "training_features_to_normalize", "list_filters"):
+        cli[key] = [rename(f) for f in cli[key]]
+    cli["sntypes"] = {"10": "Ia", "20": "Ib"}
+    norm_json = {rename(k): v for k, v in json.loads((model_dir / "data_norm.json").read_text()).items()}
+    path.mkdir(parents=True)
+    (path / "cli_args.json").write_text(json.dumps(cli))
+    (path / "data_norm.json").write_text(json.dumps(norm_json))
+    (path / "vanilla_S_0_CLF_2_R_none.pt").write_bytes((model_dir / "model.pt").read_bytes())
+    return path
+
+
+def test_snana_style_model_dir_matches(hyrax_instance, hats_catalog, model_dir, tmp_path):
+    snana_dir = snana_style_copy(model_dir, tmp_path / "snana")
+    assert load_settings(snana_dir).filters == FILTERS
+    assert load_settings(snana_dir).all_features == load_settings(model_dir).all_features
+
+    plain = infer(hyrax_instance, hats_catalog, model_dir)
+    snana = infer(hyrax_instance, hats_catalog, snana_dir)
+    assert snana.colnames == ["object_id", "SNIa", "non-SNIa", "predicted_class"]
+    plain.sort("object_id")
+    snana.sort("object_id")
+    np.testing.assert_array_equal(plain["object_id"], snana["object_id"])
+    np.testing.assert_allclose(plain["class0"], snana["SNIa"], rtol=1e-6)
+
+
 # ── training ────────────────────────────────────────────────────────────────
 
 

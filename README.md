@@ -254,6 +254,11 @@ login node) before using compute nodes.
 | `elasticc_broad` | yes (+ MWEBV) | SN, Fast, Long, Periodic, NonPeriodic |
 | `Fast_vs_other`, `Long_vs_other`, `Periodic_vs_other`, `NonPeriodic_vs_other` | yes (+ MWEBV) | X, other |
 
+Any other SuperNNova model directory works too (`pretrained="<dir>"`, `--model <dir>`), as SuperNNova writes it:
+weights in `model.pt` or a single `<model name>.pt`; filter names `LSST-u` ... `LSST-Y` (SNANA simulations) are
+read as `u` ... `Y`. Without `class_names` in `cli_args.json`, a binary model whose `sntypes` tag a group "Ia"
+gets classes SNIa, non-SNIa (SuperNNova's class 0 is the Ia group); others get class0, class1, ...
+
 ```python
 from hyrax import Hyrax
 import hyrax_snn

@@ -55,7 +55,7 @@ def pretrained_model_dir(name_or_path: str, cache_dir: str | Path | None = None)
         if not (path / "cli_args.json").exists():
             raise ValueError(
                 f"{name_or_path!r} is neither a built-in model ({sorted(PRETRAINED_MODELS)}) "
-                "nor a directory with cli_args.json, data_norm.json and model.pt."
+                "nor a directory with cli_args.json, data_norm.json and model.pt (or SuperNNova's <model name>.pt)."
             )
         return path
 
@@ -110,8 +110,43 @@ class SNNSettings:
         return [f for f in self.all_features if f in training]
 
 
+def weights_file(model_dir: str | Path) -> Path:
+    """The weights in a model directory: ``model.pt`` (Fink, hyrax_snn), else the single ``*.pt``
+    SuperNNova writes as ``<model name>.pt``. A path that doesn't exist yet means a new model to train."""
+    model_dir = Path(model_dir)
+    weights = model_dir / "model.pt"
+    if weights.exists():
+        return weights
+    candidates = sorted(model_dir.glob("*.pt"))
+    if len(candidates) > 1:
+        raise ValueError(f"No model.pt and several *.pt files in {model_dir}: {[p.name for p in candidates]}")
+    return candidates[0] if candidates else weights
+
+
+# SuperNNova runs on SNANA simulations name the LSST filters "LSST-u" ... "LSST-Y"; the Fink models
+# and hyrax_snn use "u" ... "Y". The prefix is dropped from every filter and feature name.
+SNANA_FILTER_PREFIX = "LSST-"
+
+
+def _strip_filter_prefix(name: str) -> str:
+    return name.replace(SNANA_FILTER_PREFIX, "")
+
+
+def default_class_names(cli: dict) -> list[str]:
+    """Class names of a model directory that doesn't record them: SNIa/non-SNIa for a binary model
+    whose `sntypes` tag a group "Ia" (SuperNNova's class 0), otherwise class<i>."""
+    nb_classes = int(cli["nb_classes"])
+    if nb_classes == 2 and "Ia" in (cli.get("sntypes") or {}).values():
+        return ["SNIa", "non-SNIa"]
+    return [f"class{i}" for i in range(nb_classes)]
+
+
 def load_settings(model_dir: str | Path, class_names: list[str] | None = None, fix_clipped_min: bool = False) -> SNNSettings:
     """Read cli_args.json and data_norm.json.
+
+    Filter names ``LSST-u`` ... ``LSST-Y`` (SuperNNova trained on SNANA simulations) are renamed
+    ``u`` ... ``Y``, with the features that contain them, so the model reads Rubin catalogs like
+    the Fink models.
 
     `fix_clipped_min`: SuperNNova computes the log-normalization mean/std with the true
     minimum of the training data, but stores the minimum clipped to -2000, and trains
@@ -136,16 +171,20 @@ def load_settings(model_dir: str | Path, class_names: list[str] | None = None, f
         arr_norm[clipped, 0] = -np.exp(arr_norm[clipped, 1])
 
     if class_names is None:
-        class_names = cli.get("class_names") or [f"class{i}" for i in range(int(cli["nb_classes"]))]
+        class_names = cli.get("class_names") or default_class_names(cli)
     if len(class_names) != int(cli["nb_classes"]):
         raise ValueError(f"{len(class_names)} class names for a model with {cli['nb_classes']} classes")
 
+    names = list
+    if all(f.startswith(SNANA_FILTER_PREFIX) for f in cli["list_filters"]):
+        names = lambda features: [_strip_filter_prefix(f) for f in features]  # noqa: E731
+
     return SNNSettings(
         model_dir=model_dir,
-        filters=list(cli["list_filters"]),
-        all_features=list(cli["all_features"]),
-        training_features=list(cli["training_features"]),
-        features_to_normalize=features_to_normalize,
+        filters=names(cli["list_filters"]),
+        all_features=names(cli["all_features"]),
+        training_features=names(cli["training_features"]),
+        features_to_normalize=names(features_to_normalize),
         norm=cli["norm"],
         arr_norm=arr_norm,
         redshift=cli.get("redshift") or "none",

@@ -5,10 +5,9 @@ Supernova classification of Rubin DP2 transients with ParSNIP (`src/hyrax_parsni
 `src/hyrax_lightcurves`. README.md has the full documentation.
 
 ## Where things happen
-- **Code is developed on the maintainer's Mac**, not here. On NERSC, Claude Code is used to set up the
-  environment, run jobs and look at results. Don't edit tracked files or commit/push on NERSC unless the
-  user explicitly asks; update with `git pull --ff-only`.
-- If a job fails because of a bug, report it (command, error, log path) rather than patching the code here.
+- Code is developed here on NERSC (since 2026-10-22; previously on the maintainer's Mac). Fix bugs found in
+  runs directly, with a test, and run `.venv/bin/python -m pytest -q` before committing.
+- Commit only when the user asks. Pushing from Claude's shell has no credentials: commit locally, the user pushes.
 
 ## NERSC environment (Perlmutter)
 - Set up or update everything with `bash nersc/setup_env.sh` on a **login node**, from the repo. It is safe to
@@ -19,7 +18,7 @@ Supernova classification of Rubin DP2 transients with ParSNIP (`src/hyrax_parsni
 - `nersc/prefetch.py` downloads what compute nodes may not reach: SuperNNova's pretrained models
   (`~/.cache/hyrax_snn`), the PLAsTiCC files (`data/plasticc_raw`, ~330 MB), and the simulation's passbands and
   templates; it checks the SFD dust map. Each step reports and continues on failure.
-- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/pytest -q` (35 tests).
+- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/python -m pytest -q` (36 tests).
 - `desc-td-env` path is set in `nersc/setup_env.sh` (`TD_PYTHON`, overridable).
 
 ## Running jobs
@@ -64,4 +63,4 @@ classifier in `examples/models/`. If the classifier is missing it trains it in t
 
 ## Reporting results
 When summarizing runs, include the numbers `evaluate.py` prints (accuracy / per-type recall, AUC,
-efficiency/purity), the job IDs and output paths, so they can be compared on the Mac.
+efficiency/purity), the job IDs and output paths, so they can be compared across runs.

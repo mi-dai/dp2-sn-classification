@@ -9,7 +9,7 @@ from hyrax.models import hyrax_model
 from hyrax.models.model_registry import _torch_save
 
 from hyrax_snn.features import build_features, select_observations
-from hyrax_snn.pretrained import resolve
+from hyrax_snn.pretrained import resolve, weights_file
 from hyrax_snn.rnn import VanillaRNN
 
 logger = logging.getLogger(__name__)
@@ -118,6 +118,11 @@ class HyraxSNN(nn.Module):
         self.redshift_error = float(settings["redshift_error"])
         self.device_setting = str(settings["device"])
 
+        if not set(self.band_names) & set(self.snn.filters):
+            raise ValueError(
+                f"None of the bands {sorted(self.band_names)} from data_set.LightCurveHATSDataset.band_map are "
+                f"filters of the SuperNNova model ({self.snn.filters}): no observation could be classified."
+            )
         unknown = sorted(set(self.band_names) - set(self.snn.filters))
         if unknown:
             logger.warning(
@@ -135,7 +140,7 @@ class HyraxSNN(nn.Module):
             layer_type=self.snn.layer_type,
             rnn_output_option=self.snn.rnn_output_option,
         )
-        weights = self.snn.model_dir / "model.pt"
+        weights = weights_file(self.snn.model_dir)
         if weights.exists():
             self._load_snn_state(torch.load(weights, map_location="cpu", weights_only=True))
         else:
