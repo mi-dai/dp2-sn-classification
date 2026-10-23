@@ -8,7 +8,7 @@ import torch
 from conftest import N_OBJECTS, _bazin
 
 from hyrax_scone.cnn import SconeCNN
-from hyrax_scone.heatmaps import ccm89_extinction, extinction_correct, make_heatmap, peak_time
+from hyrax_scone.heatmaps import ccm89_extinction, default_n_jobs, extinction_correct, make_heatmap, peak_time
 
 # ── CNN ───────────────────────────────────────────────────────────────────────
 
@@ -113,6 +113,14 @@ def test_peak_time():
     assert peak_time(time, flux, fluxerr) == pytest.approx(11.0)
     # No detection: the highest-S/N observation.
     assert peak_time(time, flux / 100, fluxerr) == 10.0
+
+
+def test_default_n_jobs_follows_slurm(monkeypatch):
+    # A full-node Slurm job has an affinity of every thread; SLURM_CPUS_PER_TASK is what was asked for.
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "3")
+    assert default_n_jobs() == 3
+    monkeypatch.delenv("SLURM_CPUS_PER_TASK")
+    assert default_n_jobs() >= 1
 
 
 def test_make_heatmap():

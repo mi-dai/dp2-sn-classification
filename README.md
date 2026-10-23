@@ -90,7 +90,8 @@ Slurm jobs for the long steps are in `nersc/` (`simulate_dp2`, `train_parsnip_cl
 `validate` (on a simulation, with `evaluate.py`) and `classify_edp2` (on the real EDP2 catalog) run ParSNIP
 with `CLASSIFIER` (default `examples/models/plasticc_classifier.pkl`; skipped if the file doesn't exist), the
 SuperNNova model directory `SNN_MODEL` and the SCONE model directory `SCONE_MODEL` (no defaults: each is
-skipped if not given; pass `""` for `SNN_MODEL` to run SCONE only). The Fink models are not run by these jobs. `CLAUDE.md` describes this setup for Claude Code.
+skipped if not given; pass `""` for `SNN_MODEL` to run SCONE only). The Fink models are not run by these jobs.
+`classify_edp2` writes to `examples/results/edp2/`, or to `$OUT` if set (`OUT=examples/results/edp2_scone sbatch ...`). `CLAUDE.md` describes this setup for Claude Code.
 
 Extras: `notebook` (Jupyter), `sim` (lightcurvelynx, sncosmo, dustmaps, mocpy; included in `desc-td-env`).
 SuperNNova's pretrained models are downloaded on first use (see below); SuperNNova itself is not a
@@ -400,7 +401,8 @@ Differences from upstream SCONE:
 The heatmap constants are in SCONE's FLUXCAL units (zeropoint 27.5), so Rubin nJy fluxes are rescaled
 (`RUBIN_DIA_SETTINGS`, or `rubin_dia_settings(model_dir)` for the model's training zeropoint). The heatmaps are
 made when the dataset (`SconeHATSDataset`, a `LightCurveHATSDataset` with a `heatmap` field) is created, with
-the GP fits in parallel (`[data_set.SconeHATSDataset] n_jobs`, default all CPUs), and saved in `cache_dir`
+the GP fits in parallel (`[data_set.SconeHATSDataset] n_jobs`, default Slurm's `SLURM_CPUS_PER_TASK`, else
+all CPUs: one process per thread of a full node ran out of memory), and saved in `cache_dir`
 (one `.npy` per catalog and settings; the scripts use `data/scone_heatmaps/`), so training epochs, resumed runs
 and later classification reuse them. A fit takes 0.2–2 s; the PLAsTiCC training set (7,848 objects) takes
 about 1.5 min on an Apple M-series CPU.

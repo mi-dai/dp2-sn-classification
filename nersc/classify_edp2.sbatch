@@ -10,9 +10,10 @@
 # without redshift.
 # Submit from the repo root:
 #   sbatch -A <account> -q <qos> nersc/classify_edp2.sbatch [CATALOG=<EDP2 default>] [CLASSIFIER=examples/models/plasticc_classifier.pkl] [SNN_MODEL] [SCONE_MODEL]
-# Outputs in examples/results/edp2/. SNN_MODEL is a SuperNNova model directory (snn_train.sbatch, or one
-# written by SuperNNova), run as snn_<dir name>; there is no default, and without it only ParSNIP runs.
-# The Fink elasticc_ia model is no longer run here. SCONE_MODEL is a SCONE model directory
+# Outputs in examples/results/edp2/, or in $OUT if set (OUT=examples/results/edp2_scone sbatch ...).
+# SNN_MODEL is a SuperNNova model directory (snn_train.sbatch, or one written by SuperNNova), run as
+# snn_<dir name>; there is no default, and without it only ParSNIP runs. The Fink elasticc_ia model is no
+# longer run here. SCONE_MODEL is a SCONE model directory
 # (scone_train.sbatch), run as scone_<dir name> if given; its GP heatmaps are cached in data/scone_heatmaps.
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
@@ -21,7 +22,7 @@ CATALOG=${1:-/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joine
 CLASSIFIER=${2:-examples/models/plasticc_classifier.pkl}
 SNN_MODEL=${3:-}
 SCONE_MODEL=${4:-}
-OUT=examples/results/edp2
+OUT=${OUT:-examples/results/edp2}
 for MODEL in "$SNN_MODEL" "$SCONE_MODEL"; do
     if [ -n "$MODEL" ] && [ ! -d "$MODEL" ]; then
         echo "$MODEL is not a model directory" >&2

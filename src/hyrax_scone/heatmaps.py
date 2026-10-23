@@ -201,7 +201,13 @@ def _heatmap_task(args):
 
 
 def default_n_jobs() -> int:
-    """CPUs available to this process (respects Slurm's allocation on Linux)."""
+    """CPUs available to this process: Slurm's ``SLURM_CPUS_PER_TASK`` if set, else the CPU affinity.
+
+    The affinity alone can be the whole node (256 threads on a Perlmutter CPU node) when Slurm gives
+    the job a full node, and one GP process per thread ran out of memory."""
+    slurm_cpus = os.environ.get("SLURM_CPUS_PER_TASK", "")
+    if slurm_cpus.isdigit() and int(slurm_cpus) > 0:
+        return int(slurm_cpus)
     if hasattr(os, "sched_getaffinity"):
         return len(os.sched_getaffinity(0))
     return os.cpu_count() or 1
