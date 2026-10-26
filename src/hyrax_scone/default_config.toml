@@ -28,6 +28,14 @@ time_scale_guess = 20.0
 # Cap of the std channel (in units of the largest |GP flux|): noise-dominated light curves reach
 # 1e14, which wrecks the CNN's BatchNorm statistics.
 max_std = 2.0
+# Milky Way extinction: "multiply" (flux x 10^(0.4 A_lambda)) or "add" (upstream SCONE adds A_lambda,
+# in magnitudes, to the flux; for models trained with SCONE itself).
+extinction = "multiply"
+# Divide by the maximum |GP flux| ("max_abs") or, as upstream SCONE, the maximum GP flux ("max").
+normalization = "max_abs"
+# Effective wavelength (Angstrom) of each SCONE band; SCONE's legacy LSST values. Models trained with
+# SCONE itself record theirs (filter_mean_wavelength.dat).
+band_wavelengths = { u = 3670.69, g = 4826.85, r = 6223.24, i = 7545.98, z = 8590.90, Y = 9710.28 }
 
 # Where heatmaps are saved and reused (one .npy per catalog and settings); false = not saved.
 cache_dir = false

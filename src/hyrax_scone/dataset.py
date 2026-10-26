@@ -8,7 +8,14 @@ from pathlib import Path
 import numpy as np
 
 from hyrax_lightcurves.dataset import LightCurveHATSDataset
-from hyrax_scone.heatmaps import HEATMAP_SETTING_KEYS, HEATMAP_VERSION, default_n_jobs, make_heatmaps
+from hyrax_scone.heatmaps import (
+    DEFAULT_SETTINGS,
+    HEATMAP_SETTING_KEYS,
+    HEATMAP_VERSION,
+    LATER_SETTING_KEYS,
+    default_n_jobs,
+    make_heatmaps,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +39,8 @@ class SconeHATSDataset(LightCurveHATSDataset):
     def __init__(self, config: dict, data_location: Path | str | None = None):
         super().__init__(config, data_location)
         scone = config["data_set"]["SconeHATSDataset"]
-        self.heatmap_settings = {key: scone[key] for key in HEATMAP_SETTING_KEYS}
+        # Plain JSON values (the config holds TOML types), as stored in model directories.
+        self.heatmap_settings = json.loads(json.dumps({key: scone[key] for key in HEATMAP_SETTING_KEYS}))
         n_jobs = int(scone["n_jobs"]) or default_n_jobs()
         self._heatmaps = self._load_or_make(scone["cache_dir"] or None, n_jobs)
 
@@ -42,7 +50,12 @@ class SconeHATSDataset(LightCurveHATSDataset):
         digest = hashlib.sha1()
         for array in (self._lightcurve_data, self._starts, self._stops, self._mwebv):
             digest.update(np.ascontiguousarray(array).tobytes())
-        settings = [list(self.settings["band_map"].values()), self.heatmap_settings, HEATMAP_VERSION]
+        heatmap_settings = {
+            key: value
+            for key, value in self.heatmap_settings.items()
+            if not (key in LATER_SETTING_KEYS and value == DEFAULT_SETTINGS[key])
+        }
+        settings = [list(self.settings["band_map"].values()), heatmap_settings, HEATMAP_VERSION]
         digest.update(json.dumps(settings).encode())
         return digest.hexdigest()[:20]
 

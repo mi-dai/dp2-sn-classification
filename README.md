@@ -437,6 +437,33 @@ hyrax_scone.configure(h, catalog, model_dir=model_dir, dataset_settings=settings
 predictions = hyrax_scone.load_predictions(h.infer())            # object_id, one probability per class, predicted_class
 ```
 
+### Models trained with SCONE itself (TensorFlow)
+
+A model saved by upstream SCONE (its `trained_model/` directory: `saved_model.pb`, `variables/`, and usually
+`filter_mean_wavelength.dat`) is converted into a hyrax_scone model directory, without TensorFlow:
+
+```bash
+python examples/scone_import_tf.py data/scone_model_example/trained_model --output examples/models/scone_example
+python examples/classify_rubin_dia.py data/dp2_sim_sne --method scone --model examples/models/scone_example --mwebv-column mwebv
+```
+
+`hyrax_scone.tf_checkpoint` reads the TensorFlow checkpoint and `hyrax_scone.convert` maps the ten Keras layers
+with weights onto `SconeCNN` (conv kernels transposed, BatchNorm statistics copied, the binary sigmoid output
+turned into two logits for SNIa, non-SNIa). On the example model, the converted network gives the same
+P(Ia) as TensorFlow (2.21) on the same heatmaps to 1.3e-6. Whether the model takes the redshift is read from
+its input names (`z`, `z_err`); multi-class models need `--classes` in SCONE's order.
+
+The converted model's heatmaps follow upstream SCONE (`hyrax_scone.heatmaps.UPSTREAM_SETTINGS`, recorded in its
+`scone_model.json`): Milky Way extinction added to the flux (`extinction = "add"`, helenqu/scone#61), division
+by the maximum flux (`normalization = "max"`), no cap on the uncertainty (`max_std = false`), and the band
+wavelengths from `filter_mean_wavelength.dat` (SCONE's legacy LSST values if there is none). One difference
+remains: SCONE centres the window on the simulation's true peak, hyrax_scone on the S/N²-weighted detection
+time, as for real data, so the input is close to, not identical with, what the model was trained on.
+
+The example model (provenance unknown; TF 2.11, 360,301 training steps at learning rate 5e-5; binary, no
+redshift) separates SNIa from the rest of the PLAsTiCC training set only moderately (AUC 0.726; 32% of SNIa and
+10% of the other types get P(Ia) > 0.5, TDEs 43%), as expected for a model trained on another simulation.
+
 ## Examples
 
 Shared by the classifiers:
@@ -472,6 +499,7 @@ SuperNNova only:
 
 SCONE only:
 - `examples/scone_train.py`: train SCONE on a labeled catalog (see above).
+- `examples/scone_import_tf.py`: convert a model trained with SCONE itself (TensorFlow) into a model directory.
 
 ## Notes
 
@@ -501,5 +529,7 @@ The tests build a small synthetic nested HATS catalog and cover:
   `.venv/bin/pip install --no-deps supernnova==3.0.51 natsort seaborn`)
 - SCONE: the CNN port (shapes, Keras parameter count, the transposed layout), the extinction law against
   upstream's code, heatmaps, the heatmap cache, and training (with resume), export and inference with and
-  without redshift
+  without redshift; the Keras → PyTorch weight mapping against a numpy implementation of the Keras model, the
+  upstream heatmap settings, and the example TensorFlow model (`tests/test_scone_convert.py`; the example tests
+  are skipped unless `data/scone_model_example` exists, the TensorFlow comparison unless TensorFlow is installed)
 - the PLAsTiCC converter (`examples/plasticc_to_hats.py`)

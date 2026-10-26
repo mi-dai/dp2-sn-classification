@@ -20,6 +20,9 @@ Differences from upstream SCONE:
   network gives the same output for every object in evaluation mode.
 - Light curves the GP can't fit give no heatmap (NaN).
 
+`UPSTREAM_SETTINGS` (``extinction = "add"``, ``normalization = "max"``, no std cap) reproduce upstream's
+heatmaps apart from the time window, for models trained with SCONE itself (`hyrax_scone.convert`).
+
 The flux constants (padding error, S/N floor) are SCONE's, in FLUXCAL units (zeropoint 27.5), so
 fluxes must be on zeropoint 27.5 (Rubin nJy × `hyrax_lightcurves.NJY_TO_ZP27_5`).
 """
@@ -42,8 +45,16 @@ DEFAULT_SETTINGS = {
     "peak_detection_snr": 5.0,
     "time_scale_guess": 20.0,
     "max_std": 2.0,
+    # Settings added later; left out of cache keys at their defaults so existing caches stay valid.
+    "band_wavelengths": LSST_WAVELENGTHS,
+    "extinction": "multiply",
+    "normalization": "max_abs",
 }
 HEATMAP_SETTING_KEYS = tuple(DEFAULT_SETTINGS)
+LATER_SETTING_KEYS = ("band_wavelengths", "extinction", "normalization")
+
+# Upstream SCONE's heatmaps (except the time window), for models trained with SCONE itself.
+UPSTREAM_SETTINGS = {"extinction": "add", "normalization": "max", "max_std": False}
 
 # Changes whenever the heatmaps computed for the same settings change, so cached ones are remade.
 HEATMAP_VERSION = 3
@@ -127,34 +138,43 @@ def ccm89_extinction(ebv: float, wavelength) -> np.ndarray:
     return r_v * ebv * (a + b / r_v)
 
 
-def extinction_correct(mean, std, ebv: float, wavelength):
+def extinction_correct(mean, std, ebv: float, wavelength, mode: str = "multiply"):
     """Correct the GP mean and std (n_wavelengths, n_times) for Milky Way extinction.
 
     Extinction dims the flux by 10**(-0.4 A_λ), so the intrinsic flux is the observed one times
-    10**(0.4 A_λ). Upstream SCONE instead adds A_λ (in magnitudes) to the flux,
-    ``predictions + ext`` in ``CreateHeatmapsBase._get_predictions_heatmap``; after the heatmap is
-    divided by its maximum flux that adds a near-constant offset of order A_λ / peak flux.
+    10**(0.4 A_λ) (``mode="multiply"``). Upstream SCONE instead adds A_λ (in magnitudes) to the flux,
+    ``predictions + ext`` in ``CreateHeatmapsBase._get_predictions_heatmap`` (helenqu/scone#61), and
+    leaves the std as it is (``mode="add"``, for models trained with SCONE itself); after the heatmap
+    is divided by its maximum flux that adds a near-constant offset of order A_λ / peak flux.
     """
-    factor = 10 ** (0.4 * ccm89_extinction(ebv, wavelength))[:, None]
+    extinction = ccm89_extinction(ebv, wavelength)[:, None]
+    if mode == "add":
+        return mean + extinction, std
+    if mode != "multiply":
+        raise ValueError(f"Unknown extinction mode {mode!r}; use 'multiply' or 'add'")
+    factor = 10 ** (0.4 * extinction)
     return mean * factor, std * factor
 
 
 def make_heatmap(time, flux, fluxerr, bands, mwebv: float = 0.0, settings: dict | None = None) -> np.ndarray:
     """SCONE heatmap of one light curve: float32 (2, n_wavelengths, n_times) with the GP mean and std,
-    both divided by the maximum |mean|; all NaN if no heatmap can be made.
+    both divided by the maximum |mean| (or the maximum mean, ``normalization="max"``); all NaN if no
+    heatmap can be made.
 
-    `bands` are SCONE band names (keys of `LSST_WAVELENGTHS`); observations in other bands are dropped.
+    `bands` are SCONE band names (keys of the ``band_wavelengths`` setting, by default
+    `LSST_WAVELENGTHS`); observations in other bands are dropped.
     """
     settings = {**DEFAULT_SETTINGS, **(settings or {})}
     shape = (2, int(settings["n_wavelengths"]), int(settings["n_times"]))
     failed = np.full(shape, np.nan, dtype=np.float32)
 
+    band_wavelengths = {str(b): float(w) for b, w in settings["band_wavelengths"].items()}
     bands = np.asarray(bands)
-    known = np.isin(bands, list(LSST_WAVELENGTHS))
+    known = np.isin(bands, list(band_wavelengths))
     time, flux, fluxerr, bands = (np.asarray(a)[known] for a in (time, flux, fluxerr, bands))
     if len(time) < 2:
         return failed
-    wavelength = np.array([LSST_WAVELENGTHS[b] for b in bands])
+    wavelength = np.array([band_wavelengths[b] for b in bands])
     peak = peak_time(time, flux, fluxerr, float(settings["peak_detection_snr"]))
 
     # As upstream: the GP is fit to the whole light curve plus zero-flux points (error 0.1) 100 days
@@ -163,7 +183,7 @@ def make_heatmap(time, flux, fluxerr, bands, mwebv: float = 0.0, settings: dict 
     time = np.concatenate([time, pad_time])
     flux = np.concatenate([flux, [0.0, 0.0]])
     fluxerr = np.concatenate([fluxerr, [0.1, 0.1]])
-    wavelength = np.concatenate([wavelength, [LSST_WAVELENGTHS["r"]] * 2])
+    wavelength = np.concatenate([wavelength, [band_wavelengths["r"]] * 2])
 
     gp = fit_gp(time, flux, fluxerr, wavelength, float(settings["time_scale_guess"]))
     if gp is None:
@@ -179,11 +199,16 @@ def make_heatmap(time, flux, fluxerr, bands, mwebv: float = 0.0, settings: dict 
         return failed
     mean = mean.reshape(shape[1], shape[2])
     std = np.sqrt(np.clip(variance, 0, None)).reshape(shape[1], shape[2])
-    mean, std = extinction_correct(mean, std, float(mwebv), grid_wavelengths)
+    mean, std = extinction_correct(mean, std, float(mwebv), grid_wavelengths, str(settings["extinction"]))
 
-    # Both channels divided by the maximum |mean| (SCONE's data_utils.get_images: the maximum of the
-    # mean, which is the same for supernovae; see the module docstring).
-    scale = np.abs(mean).max()
+    # Both channels divided by the maximum |mean|, or, as SCONE's data_utils.get_images, the maximum of
+    # the mean ("max"); the two are the same for supernovae, see the module docstring.
+    if settings["normalization"] == "max_abs":
+        scale = np.abs(mean).max()
+    elif settings["normalization"] == "max":
+        scale = mean.max()
+    else:
+        raise ValueError(f"Unknown normalization {settings['normalization']!r}; use 'max_abs' or 'max'")
     if not np.isfinite(scale) or scale <= 0:
         return failed
     with np.errstate(over="ignore"):
@@ -191,7 +216,8 @@ def make_heatmap(time, flux, fluxerr, bands, mwebv: float = 0.0, settings: dict 
     # A GP whose flux vanishes everywhere overflows: no heatmap.
     if not np.isfinite(heatmap).all():
         return failed
-    heatmap[1] = np.minimum(heatmap[1], float(settings["max_std"]))
+    if settings["max_std"] is not False:
+        heatmap[1] = np.minimum(heatmap[1], float(settings["max_std"]))
     return heatmap
 
 

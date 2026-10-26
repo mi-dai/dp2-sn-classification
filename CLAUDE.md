@@ -18,7 +18,7 @@ shared dataset in `src/hyrax_lightcurves` (which also holds the shared training 
 - `nersc/prefetch.py` downloads what compute nodes may not reach: SuperNNova's pretrained models
   (`~/.cache/hyrax_snn`), the PLAsTiCC files (`data/plasticc_raw`, ~330 MB), and the simulation's passbands and
   templates; it checks the SFD dust map. Each step reports and continues on failure.
-- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/python -m pytest -q` (46 tests).
+- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/python -m pytest -q` (57 tests; the TensorFlow comparison is skipped without TensorFlow).
 - `desc-td-env` path is set in `nersc/setup_env.sh` (`TD_PYTHON`, overridable).
 
 ## Running jobs
@@ -65,7 +65,10 @@ classifier in `examples/models/`. If the classifier is missing it trains it in t
   the flux by 10^(0.4 A_λ) (upstream adds A_λ), heatmaps divided by max |mean| (upstream: max mean, which blows
   up for negative-flux variables), std channel capped at 2 (outliers broke BatchNorm), class weights instead of downsampling, softmax output.
   A model directory (`scone_model.json`, `model.pt`) records its heatmap settings and flux zeropoint, which
-  `classify_rubin_dia.py --method scone --model DIR` reuses.
+  `classify_rubin_dia.py --method scone --model DIR` reuses. Models trained with SCONE itself (TensorFlow
+  SavedModels, e.g. `data/scone_model_example/trained_model`) are converted with `scone_import_tf.py` (no
+  TensorFlow needed); they use upstream's heatmap settings (additive extinction, max normalization, no std cap,
+  their band wavelengths), except the window, which stays the S/N²-weighted detection time.
 - SuperNNova's input options (`--detection-snr`, `--no-time-window`, `--fink-exact`) are still being chosen by
   comparing them on the simulation; the defaults are a starting point.
 
