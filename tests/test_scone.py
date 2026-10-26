@@ -123,6 +123,44 @@ def test_default_n_jobs_follows_slurm(monkeypatch):
     assert default_n_jobs() >= 1
 
 
+def _blas_threads():
+    from threadpoolctl import threadpool_info
+
+    return [pool["num_threads"] for pool in threadpool_info()]
+
+
+def test_heatmap_workers_use_one_blas_thread(monkeypatch):
+    # Workers that each start one BLAS thread per CPU oversubscribe the node and slow the GP fits ~100x.
+    # The limit must be in place when the workers are forked (asking OpenMP from a forked worker crashes
+    # it, so this checks in this process, where the pool is created and the serial fits run).
+    import hyrax_scone.heatmaps as heatmaps
+
+    seen = []
+
+    class RecordingPool:
+        def __init__(self, max_workers):
+            seen.append(_blas_threads())
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def map(self, func, tasks, chunksize=1):
+            return map(func, tasks)
+
+    def task(args):
+        seen.append(_blas_threads())
+        return np.zeros((2, 1, 1), dtype=np.float32)
+
+    monkeypatch.setattr(heatmaps, "ProcessPoolExecutor", RecordingPool)
+    monkeypatch.setattr(heatmaps, "_heatmap_task", task)
+    for n_jobs in (1, 2):
+        heatmaps.make_heatmaps([()] * 3, n_jobs=n_jobs)
+    assert len(seen) == 7 and all(n == 1 for threads in seen for n in threads)
+
+
 def test_make_heatmap():
     time, flux, fluxerr, bands = toy_lightcurve()
     heatmap = make_heatmap(time, flux, fluxerr, bands, mwebv=0.0)

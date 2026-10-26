@@ -405,7 +405,8 @@ the GP fits in parallel (`[data_set.SconeHATSDataset] n_jobs`, default Slurm's `
 all CPUs: one process per thread of a full node ran out of memory), and saved in `cache_dir`
 (one `.npy` per catalog and settings; the scripts use `data/scone_heatmaps/`), so training epochs, resumed runs
 and later classification reuse them. A fit takes 0.2–2 s; the PLAsTiCC training set (7,848 objects) takes
-about 1.5 min on an Apple M-series CPU.
+about 1.5 min on an Apple M-series CPU. BLAS runs on one thread per process during the fits: at NERSC each
+worker otherwise started 128 OpenBLAS threads and a heatmap took ~20 s instead of ~0.1 s.
 
 ### Training SCONE
 

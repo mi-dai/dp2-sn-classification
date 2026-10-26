@@ -17,6 +17,7 @@ dependencies = [
     "torch",
     "lightgbm",
     "george",
+    "threadpoolctl",
     "numpy",
     "astropy",
 ]

@@ -218,13 +218,21 @@ def make_heatmaps(lightcurves, settings: dict | None = None, n_jobs: int = 1) ->
 
     `lightcurves` is a sequence of ``(time, flux, fluxerr, bands, mwebv)``; with `n_jobs` > 1 the
     GP fits run in a process pool.
+
+    BLAS runs on one thread per process: the GP fits' small matrices gain nothing from more, and every
+    worker starting one thread per CPU (128 at NERSC) made a heatmap take 21 s instead of 0.075 s. The
+    limit is set here, before the workers are forked, so they inherit it (calling into OpenMP from a
+    forked worker crashes it).
     """
+    from threadpoolctl import threadpool_limits
+
     tasks = [(*lc, settings) for lc in lightcurves]
-    if n_jobs <= 1 or len(tasks) < 2:
-        results = [_heatmap_task(t) for t in tasks]
-    else:
-        with ProcessPoolExecutor(max_workers=n_jobs) as pool:
-            results = list(pool.map(_heatmap_task, tasks, chunksize=max(1, len(tasks) // (8 * n_jobs))))
+    with threadpool_limits(limits=1):
+        if n_jobs <= 1 or len(tasks) < 2:
+            results = [_heatmap_task(t) for t in tasks]
+        else:
+            with ProcessPoolExecutor(max_workers=n_jobs) as pool:
+                results = list(pool.map(_heatmap_task, tasks, chunksize=max(1, len(tasks) // (8 * n_jobs))))
     settings = {**DEFAULT_SETTINGS, **(settings or {})}
     shape = (len(results), 2, int(settings["n_wavelengths"]), int(settings["n_times"]))
     return np.stack(results) if results else np.zeros(shape, dtype=np.float32)
