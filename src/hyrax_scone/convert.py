@@ -14,10 +14,17 @@ layer and the output. They map one to one onto `SconeCNN`:
 The heatmaps are then made as upstream SCONE made them (`hyrax_scone.heatmaps.UPSTREAM_SETTINGS`, with the
 model's band wavelengths), except for the time window, which is centred on the S/N²-weighted detection
 time instead of the simulation's true peak.
+
+`resolve_model_dir` converts on the fly: wherever a model directory is expected, a SavedModel can be given
+and is converted once into ``~/.cache/hyrax_scone/converted/<name>``.
 """
 
+import hashlib
 import json
+import os
 import re
+import shutil
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -34,6 +41,10 @@ NORM_LAYERS = (1, 3, 5, 7)
 DENSE_LAYER, OUTPUT_LAYER = 8, 9
 # Written by SCONE next to the model: the band wavelengths its heatmaps were made with.
 FILTER_WAVE_FILE = "filter_mean_wavelength.dat"
+# SCONE's name for the SavedModel directory.
+SAVED_MODEL_DIRNAME = "trained_model"
+# Changes when converted models would differ, so cached conversions are redone.
+CONVERTER_VERSION = 1
 
 
 def keras_weights(tensors: dict) -> dict[int, dict[str, np.ndarray]]:
@@ -161,8 +172,86 @@ def import_saved_model(
         "class_weights": None,
         "trained_with": "scone (tensorflow)",
         "converted_from": str(saved_model.resolve()),
+        "source_sha1": source_sha1(saved_model),
         "band_wavelengths_from": str(wave_file) if wave_file.exists() else "SCONE's legacy LSST values",
         "tensorflow_optimizer": optimizer,
     }
     (output / MODEL_INFO_FILENAME).write_text(json.dumps(info, indent=2))
     return info
+
+
+def is_saved_model(path) -> bool:
+    path = Path(path)
+    return (path / "saved_model.pb").is_file() and (path / "variables").is_dir()
+
+
+def source_sha1(saved_model) -> str:
+    """Hash of everything a conversion depends on: the SavedModel's files and `CONVERTER_VERSION`."""
+    saved_model = Path(saved_model)
+    digest = hashlib.sha1(f"converter {CONVERTER_VERSION}".encode())
+    files = [saved_model / "saved_model.pb", saved_model / FILTER_WAVE_FILE]
+    files += sorted((saved_model / "variables").iterdir())
+    for path in files:
+        if path.is_file():
+            digest.update(path.name.encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def default_cache_dir() -> Path:
+    """``$XDG_CACHE_HOME/hyrax_scone``, or ``~/.cache/hyrax_scone``."""
+    base = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+    return Path(base) / "hyrax_scone"
+
+
+def resolve_model_dir(path, cache_dir=None) -> Path:
+    """A hyrax_scone model directory for `path`, converting SCONE TensorFlow models on the fly.
+
+    - A hyrax_scone model directory (``scone_model.json``) is returned as it is.
+    - A SavedModel written by SCONE (``saved_model.pb``, ``variables/``), or a directory holding one as
+      ``trained_model/`` (e.g. ``data/scone_model_example``), is converted into
+      ``<cache_dir>/converted/<name>``, named after the given directory (its parent's name when it is
+      ``trained_model/`` itself). The conversion is reused while the model and the converter are
+      unchanged (``source_sha1`` in its ``scone_model.json``) and redone otherwise.
+
+    `cache_dir` defaults to `default_cache_dir`. Multi-class SavedModels need their class names: convert
+    them with ``examples/scone_import_tf.py --classes``.
+    """
+    path = Path(path)
+    if (path / MODEL_INFO_FILENAME).is_file():
+        return path
+    saved_model = path / SAVED_MODEL_DIRNAME if is_saved_model(path / SAVED_MODEL_DIRNAME) else path
+    if not is_saved_model(saved_model):
+        raise FileNotFoundError(
+            f"{path} is neither a SCONE model directory ({MODEL_INFO_FILENAME}, model.pt) nor a TensorFlow "
+            f"SavedModel written by SCONE (saved_model.pb, variables/), nor a directory holding one as "
+            f"{SAVED_MODEL_DIRNAME}/"
+        )
+    resolved = saved_model.resolve()
+    name = resolved.parent.name if resolved.name == SAVED_MODEL_DIRNAME else resolved.name
+    target = Path(cache_dir or default_cache_dir()) / "converted" / name
+
+    digest = source_sha1(saved_model)
+    info_path = target / MODEL_INFO_FILENAME
+    if info_path.is_file() and json.loads(info_path.read_text()).get("source_sha1") == digest:
+        return target
+
+    # Convert next to the target and move it into place, so concurrent jobs never see a partial copy.
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{name}-", dir=target.parent))
+    staging.chmod(0o755)  # mkdtemp makes it private; model directories are normally readable
+    try:
+        import_saved_model(saved_model, staging)
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+        os.replace(staging, target)
+    except ValueError as error:
+        raise ValueError(f"{error} (convert it with examples/scone_import_tf.py)") from error
+    except OSError:
+        # Another process put its conversion in place first; use it if it is current.
+        if not (info_path.is_file() and json.loads(info_path.read_text()).get("source_sha1") == digest):
+            raise
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
+    return target

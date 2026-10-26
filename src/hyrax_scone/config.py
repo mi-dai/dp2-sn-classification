@@ -78,8 +78,9 @@ def configure(
     catalog_path : str or Path
         HATS catalog with a nested light-curve column.
     model_dir : str or Path
-        SCONE model directory (``scone_model.json``; see `hyrax_scone.new_model_dir`). Its heatmap
-        settings and band map are used for the catalog, so heatmaps are made as in training.
+        SCONE model directory (``scone_model.json``; see `hyrax_scone.new_model_dir`), or a TensorFlow
+        SavedModel written by SCONE, converted on the fly (`hyrax_scone.convert.resolve_model_dir`). Its
+        heatmap settings and band map are used for the catalog, so heatmaps are made as in training.
     groups : tuple of str
         data_request groups to create; "train" / "validate" also request ``label_index``
         (set ``label_column`` and ``label_scheme`` in `dataset_settings`).
@@ -87,6 +88,9 @@ def configure(
         `[data_set.LightCurveHATSDataset]` overrides, e.g. `rubin_dia_settings(model_dir)`, and
         ``"scone"``: ``[data_set.SconeHATSDataset]`` overrides such as ``cache_dir`` and ``n_jobs``.
     """
+    from hyrax_scone.convert import resolve_model_dir
+
+    model_dir = resolve_model_dir(model_dir)
     info = load_model_info(model_dir)
     settings = dict(dataset_settings or {})
     settings["scone"] = {**settings.get("scone", {}), **info["heatmap_settings"]}
@@ -100,9 +104,12 @@ def configure(
 
 
 def rubin_dia_settings(model_dir) -> dict:
-    """`RUBIN_DIA_SETTINGS` with Rubin nJy fluxes rescaled to the model's training zeropoint."""
+    """`RUBIN_DIA_SETTINGS` with Rubin nJy fluxes rescaled to the model's training zeropoint (`model_dir`
+    may be a SCONE TensorFlow SavedModel, see `hyrax_scone.convert.resolve_model_dir`)."""
+    from hyrax_scone.convert import resolve_model_dir
+
     settings = dict(RUBIN_DIA_SETTINGS)
-    zeropoint = load_model_info(model_dir).get("flux_zeropoint")
+    zeropoint = load_model_info(resolve_model_dir(model_dir)).get("flux_zeropoint")
     if zeropoint is not None:
         settings["flux_scale"] = 10 ** (-0.4 * (31.4 - float(zeropoint)))
     return settings

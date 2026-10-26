@@ -209,3 +209,54 @@ def test_example_matches_tensorflow(tmp_path):
     signature = tf.saved_model.load(str(EXAMPLE)).signatures["serving_default"]
     theirs = signature(image=tf.constant(heatmaps.transpose(0, 2, 3, 1)))["label"].numpy()[:, 0]
     np.testing.assert_allclose(ours, theirs, atol=1e-5)
+
+
+# ── on-the-fly conversion ─────────────────────────────────────────────────────
+
+
+def test_resolve_model_dir_keeps_model_dirs_and_rejects_others(tmp_path):
+    from hyrax_scone import resolve_model_dir
+
+    model_dir = tmp_path / "trained_here"
+    model_dir.mkdir()
+    (model_dir / "scone_model.json").write_text("{}")
+    assert resolve_model_dir(model_dir, cache_dir=tmp_path / "cache") == model_dir
+    with pytest.raises(FileNotFoundError, match="SavedModel"):
+        resolve_model_dir(tmp_path, cache_dir=tmp_path / "cache")
+
+
+@needs_example
+def test_saved_model_converted_on_the_fly(hats_catalog, tmp_path, monkeypatch):
+    import hyrax_scone.convert
+    from hyrax_scone import configure, load_model_info, load_predictions, resolve_model_dir
+
+    cache = tmp_path / "cache"
+    converted = resolve_model_dir(EXAMPLE.parent, cache_dir=cache)
+    # Named after the given directory; SCONE's trained_model/ itself gives the same copy.
+    assert converted == cache / "converted" / EXAMPLE.parent.name
+    assert load_model_info(converted)["class_names"] == ["SNIa", "non-SNIa"]
+
+    def no_conversion(*args, **kwargs):
+        raise AssertionError("converted again")
+
+    original = hyrax_scone.convert.import_saved_model
+    monkeypatch.setattr(hyrax_scone.convert, "import_saved_model", no_conversion)
+    assert resolve_model_dir(EXAMPLE, cache_dir=cache) == converted
+    # A stale copy (other model or converter version) is converted again.
+    info = json.loads((converted / "scone_model.json").read_text())
+    info["source_sha1"] = "stale"
+    (converted / "scone_model.json").write_text(json.dumps(info))
+    monkeypatch.setattr(hyrax_scone.convert, "import_saved_model", original)
+    assert resolve_model_dir(EXAMPLE, cache_dir=cache) == converted
+    assert load_model_info(converted)["source_sha1"] != "stale"
+
+    # configure() takes the SavedModel itself (default cache redirected to tmp).
+    from hyrax import Hyrax
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
+    h = Hyrax()
+    h.set_config("general.results_dir", str(tmp_path / "results"))
+    configure(h, hats_catalog, model_dir=EXAMPLE.parent, dataset_settings={"scone": {"n_jobs": 2}})
+    assert h.config["model"]["HyraxSCONE"]["model_dir"] == str(tmp_path / "xdg" / "hyrax_scone" / "converted" / EXAMPLE.parent.name)
+    predictions = load_predictions(h.infer())
+    assert (predictions["predicted_class"] != "").all()

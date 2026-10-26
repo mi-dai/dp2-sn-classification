@@ -26,7 +26,8 @@ observations, and runs a pretrained model:
   NonPeriodic). Models are downloaded on first use (run once on a NERSC login node).
   ``--fink-exact`` approximates Fink's own input processing, for comparison.
 - ``--method scone``: class probabilities from a SCONE model directory trained with
-  ``scone_train.py`` (``--model DIR``, required: SCONE has no pretrained models). Fluxes are
+  ``scone_train.py``, or a model trained with SCONE itself (its TensorFlow ``trained_model/``, or the
+  directory holding it), converted on the first use (``--model DIR``, required). Fluxes are
   rescaled to its training zeropoint; the GP heatmaps are made as in training, in parallel
   (``--n-jobs``), and cached (``--heatmap-cache``). The model takes the redshift only if it was
   trained with one (then ``--redshift-column`` is required).
@@ -67,7 +68,7 @@ def parse_args():
         help=f"Pretrained model. parsnip: {', '.join(PARSNIP_MODELS)} or a .pt path (default plasticc_photoz, or "
         f"plasticc with --redshift-column); snn: {', '.join(sorted(hyrax_snn.PRETRAINED_MODELS))} or a model "
         "directory from snn_train.py (default elasticc_ia, or elasticc_broad with --redshift-column); scone: a "
-        "model directory from scone_train.py (required)",
+        "model directory from scone_train.py or a TensorFlow SavedModel written by SCONE (required)",
     )
     parser.add_argument(
         "--output", help="Output table (.parquet/.ecsv; default examples/results/<method>_predictions.parquet)"
@@ -112,10 +113,10 @@ def parse_args():
 
     if args.method == "scone":
         if args.model is None:
-            parser.error("--method scone needs --model, a model directory from scone_train.py")
-        try:
-            info = hyrax_scone.load_model_info(args.model)
-        except FileNotFoundError as error:
+            parser.error("--method scone needs --model: a model directory from scone_train.py, or a SCONE SavedModel")
+        try:  # a TensorFlow SavedModel written by SCONE is converted here (once, then cached)
+            info = hyrax_scone.load_model_info(hyrax_scone.resolve_model_dir(args.model))
+        except (FileNotFoundError, ValueError) as error:
             parser.error(str(error))
         if info["with_z"] and not args.redshift_column:
             parser.error(f"The SCONE model {args.model} takes the redshift: pass --redshift-column")

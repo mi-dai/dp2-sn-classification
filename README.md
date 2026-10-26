@@ -440,12 +440,20 @@ predictions = hyrax_scone.load_predictions(h.infer())            # object_id, on
 ### Models trained with SCONE itself (TensorFlow)
 
 A model saved by upstream SCONE (its `trained_model/` directory: `saved_model.pb`, `variables/`, and usually
-`filter_mean_wavelength.dat`) is converted into a hyrax_scone model directory, without TensorFlow:
+`filter_mean_wavelength.dat`) can be given directly wherever a SCONE model directory is expected, as the
+SavedModel or the directory holding it:
 
 ```bash
-python examples/scone_import_tf.py data/scone_model_example/trained_model --output examples/models/scone_example
-python examples/classify_rubin_dia.py data/dp2_sim_sne --method scone --model examples/models/scone_example --mwebv-column mwebv
+python examples/classify_rubin_dia.py data/dp2_sim_sne --method scone --model data/scone_model_example --mwebv-column mwebv
+sbatch -A <account> -q <qos> nersc/validate.sbatch data/dp2_sim_sne examples/models/plasticc_classifier.pkl "" data/scone_model_example
 ```
+
+It is converted into a hyrax_scone model directory without TensorFlow on first use, in a few milliseconds
+(`hyrax_scone.resolve_model_dir`), and kept in `~/.cache/hyrax_scone/converted/<name>` (or under
+`$XDG_CACHE_HOME`), named after the given directory: `data/scone_model_example` and
+`data/scone_model_example/trained_model` both give `converted/scone_model_example`. The copy is reused while
+the SavedModel and the converter are unchanged, and converted again otherwise. `examples/scone_import_tf.py
+SAVED_MODEL --output DIR` makes a copy where you want it, and is needed for multi-class models (`--classes`).
 
 `hyrax_scone.tf_checkpoint` reads the TensorFlow checkpoint and `hyrax_scone.convert` maps the ten Keras layers
 with weights onto `SconeCNN` (conv kernels transposed, BatchNorm statistics copied, the binary sigmoid output
