@@ -10,7 +10,8 @@
 # and score them against the truth.
 # Submit from the repo root:
 #   sbatch -A <account> -q <qos> nersc/validate.sbatch [CATALOG=data/dp2_sim_sne] [CLASSIFIER=examples/models/plasticc_classifier.pkl] [SNN_MODEL] [SCONE_MODEL]
-# Outputs in examples/results/validate/: predictions (*.parquet) and figures (eval_*/).
+# Outputs in examples/results/validate/, or in $OUT if set: predictions (*.parquet) and figures (eval_*/).
+# With NIGHTLY_COADD=1, observations are coadded per night and band first (use a separate OUT).
 # ParSNIP is skipped if the classifier doesn't exist (run train_parsnip_classifier.sbatch first).
 # SNN_MODEL is a SuperNNova model directory (snn_train.sbatch, or one written by SuperNNova), run as
 # snn_<dir name>; there is no default, and without it only ParSNIP runs. The Fink models (elasticc_ia,
@@ -23,7 +24,8 @@ CATALOG=${1:-data/dp2_sim_sne}
 CLASSIFIER=${2:-examples/models/plasticc_classifier.pkl}
 SNN_MODEL=${3:-}
 SCONE_MODEL=${4:-}
-OUT=examples/results/validate
+OUT=${OUT:-examples/results/validate}
+NIGHTLY_COADD=${NIGHTLY_COADD:-}
 for MODEL in "$SNN_MODEL" "$SCONE_MODEL"; do
     if [ -n "$MODEL" ] && [ ! -d "$MODEL" ]; then
         echo "$MODEL is not a model directory" >&2
@@ -31,7 +33,7 @@ for MODEL in "$SNN_MODEL" "$SCONE_MODEL"; do
     fi
 done
 mkdir -p "$OUT"
-run() { .venv/bin/python examples/classify_rubin_dia.py "$CATALOG" --results-dir "$OUT/hyrax" "$@"; }
+run() { .venv/bin/python examples/classify_rubin_dia.py "$CATALOG" --results-dir "$OUT/hyrax" ${NIGHTLY_COADD:+--nightly-coadd} "$@"; }
 evaluate() { .venv/bin/python examples/evaluate.py "$CATALOG" "$OUT/$1.parquet" --output-dir "$OUT/eval_$1"; }
 
 if [ -f "$CLASSIFIER" ]; then
