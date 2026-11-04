@@ -38,6 +38,12 @@ flux_scale = 1.0
 # the file are dropped.
 baseline_file = false
 
+# Coadd each object's observations per night and band (inverse-variance weighted), after dropping
+# flagged observations and before the baseline correction. Same-night points are clipped at
+# nightly_clip_sigma first (fixed |pull|, nights with at least 3 points).
+nightly_coadd = false
+nightly_clip_sigma = 5.0
+
 # Nested boolean sub-columns (e.g. Rubin "psfDiffFlux_flag", "pixelFlags_saturated").
 # Observations with any of them set are dropped.
 flag_columns = []

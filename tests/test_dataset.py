@@ -201,3 +201,65 @@ def test_baseline_file(hyrax_instance, tmp_path):
     # Object 1 has no applied band, so it is unchanged.
     raw_row = [raw.get_object_id(i) for i in range(4)].index(str(ids[1]))
     np.testing.assert_array_equal(corrected.get_lightcurve(1), raw.get_lightcurve(raw_row))
+
+
+def test_nightly_coadd(hyrax_instance, tmp_path):
+    """Flagged visits stay out of the coadd, and the baseline applies to the nightly points."""
+    import lsdb
+    import nested_pandas as npd
+    import pandas as pd
+
+    # One object: 4 g visits on each of 3 nights, the last one flagged and far off.
+    mjd = np.repeat([60000.1, 60001.1, 60002.1], 4) + np.tile([0.0, 0.01, 0.02, 0.03], 3)
+    n_visits = len(mjd)
+    sources = pd.DataFrame(
+        {
+            "midpointMjdTai": mjd,
+            "psfDiffFlux": np.tile([100.0, 100.0, 100.0, 9999.0], 3),
+            "psfDiffFluxErr": np.full(n_visits, 12.0),
+            "band": ["g"] * n_visits,
+            "bad": np.tile([False, False, False, True], 3),
+        },
+        index=np.zeros(n_visits, dtype=int),
+    )
+    object_id = 10**15
+    base = pd.DataFrame({"diaObjectId": [object_id], "ra": [10.0], "dec": [-5.0]})
+    nested = npd.NestedFrame(base).join_nested(sources, "diaObjectForcedSource")
+    path = tmp_path / "rubin_like"
+    lsdb.from_dataframe(nested, ra_column="ra", dec_column="dec").write_catalog(path)
+
+    baselines = pd.DataFrame({"diaObjectId": [object_id]})
+    for band in "ugrizy":
+        baselines[f"{band}_B"] = np.nan
+        baselines[f"{band}_B_err"] = np.nan
+        baselines[f"{band}_B_applied"] = False
+    baselines.loc[0, ["g_B", "g_B_err", "g_B_applied"]] = [-50.0, 30.0, True]
+    baseline_file = tmp_path / "baselines.parquet"
+    baselines.to_parquet(baseline_file)
+
+    configure(hyrax_instance, path)
+    settings = {
+        "id_column": "diaObjectId",
+        "redshift_column": False,
+        "require_redshift": False,
+        "lightcurve_column": "diaObjectForcedSource",
+        "time_column": "midpointMjdTai",
+        "flux_column": "psfDiffFlux",
+        "fluxerr_column": "psfDiffFluxErr",
+        "flag_columns": ["bad"],
+        "flux_scale": 0.5,
+        "baseline_file": str(baseline_file),
+    }
+    for key, value in settings.items():
+        hyrax_instance.set_config(f"data_set.LightCurveHATSDataset.{key}", value)
+    visits = LightCurveHATSDataset(hyrax_instance.config, data_location=path).get_lightcurve(0)
+    assert len(visits) == 9
+
+    hyrax_instance.set_config("data_set.LightCurveHATSDataset.nightly_coadd", True)
+    nightly = LightCurveHATSDataset(hyrax_instance.config, data_location=path).get_lightcurve(0)
+
+    assert len(nightly) == 3
+    np.testing.assert_allclose(nightly[:, 0], [60000.11, 60001.11, 60002.11])
+    np.testing.assert_allclose(nightly[:, 1], 150.0 * 0.5)
+    # B_err is added once per night, not averaged down by the 3 visits.
+    np.testing.assert_allclose(nightly[:, 2], np.hypot(12.0 / np.sqrt(3), 30.0) * 0.5)

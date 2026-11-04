@@ -4,6 +4,8 @@ from pathlib import Path
 import numpy as np
 from hyrax.datasets import HyraxDataset
 
+from hyrax_lightcurves.nightly import coadd_nightly
+
 logger = logging.getLogger(__name__)
 
 # Columns of the per-object array returned by `get_lightcurve`.
@@ -24,6 +26,10 @@ class LightCurveHATSDataset(HyraxDataset):
     corrected and objects not in the file are dropped: where ``{band}_B_applied`` is true,
     ``{band}_B`` is subtracted from the flux and ``{band}_B_err`` added in quadrature to fluxerr,
     both in catalog flux units (before ``flux_scale``).
+
+    With ``nightly_coadd``, each object's cleaned observations are coadded per night and band
+    (`hyrax_lightcurves.nightly.coadd_nightly`) before the baseline correction, which then applies to
+    the nightly points; ``min_observations`` counts nightly points.
 
     Fields
     ------
@@ -110,19 +116,6 @@ class LightCurveHATSDataset(HyraxDataset):
             flat[settings["band_column"]].astype(str).map(band_lookup).fillna(-1).to_numpy(dtype=np.int64)
         )
 
-        if baseline_file:
-            known = band_index >= 0
-            flux_offset, added_err = np.zeros(len(flux)), np.zeros(len(flux))
-            flux_offset[known] = baseline[row[known], band_index[known]]
-            added_err[known] = baseline_err[row[known], band_index[known]]
-            flux = flux - flux_offset
-            fluxerr = np.hypot(fluxerr, added_err)
-
-        # Convert fluxes to the zeropoint the model was trained with.
-        flux_scale = float(settings.get("flux_scale", 1.0))
-        flux = flux * flux_scale
-        fluxerr = fluxerr * flux_scale
-
         flagged = np.zeros(len(flat), dtype=bool)
         for column in settings.get("flag_columns") or []:
             flagged |= flat[column].fillna(False).to_numpy(dtype=bool)
@@ -143,7 +136,27 @@ class LightCurveHATSDataset(HyraxDataset):
             band_index[valid],
         )
 
-        # to_flat keeps rows grouped by object, so each object is a contiguous slice.
+        # Before the baseline: baselines are per night, so B_err must not be averaged down by a coadd.
+        if settings.get("nightly_coadd"):
+            n_visits = len(row)
+            row, time, flux, fluxerr, band_index = coadd_nightly(
+                row, time, flux, fluxerr, band_index, clip_sigma=float(settings.get("nightly_clip_sigma", 5.0))
+            )
+            logger.info(f"LightCurveHATSDataset: coadded {n_visits} visits into {len(row)} nightly points.")
+
+        if baseline_file:
+            flux = flux - baseline[row, band_index]
+            fluxerr = np.hypot(fluxerr, baseline_err[row, band_index])
+
+        # Convert fluxes to the zeropoint the model was trained with.
+        flux_scale = float(settings.get("flux_scale", 1.0))
+        flux = flux * flux_scale
+        fluxerr = fluxerr * flux_scale
+
+        usable = np.isfinite(flux) & np.isfinite(fluxerr) & (fluxerr > 0)  # e.g. a non-finite baseline
+        row, time, flux, fluxerr, band_index = row[usable], time[usable], flux[usable], fluxerr[usable], band_index[usable]
+
+        # to_flat keeps rows grouped by object (and the coadd sorts by object), so each object is a contiguous slice.
         offsets = np.searchsorted(row, np.arange(n_objects + 1))
         counts = np.diff(offsets)
 

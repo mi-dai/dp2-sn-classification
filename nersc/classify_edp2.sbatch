@@ -17,6 +17,8 @@
 # (scone_train.sbatch), run as scone_<dir name> if given; its GP heatmaps are cached in data/scone_heatmaps.
 # With BASELINE_FILE set (BASELINE_FILE=<parquet> sbatch ...), per-band baselines from that file are corrected
 # and only the objects in it are classified.
+# With NIGHTLY_COADD=1, observations are coadded per night and band first. FLUXERR_COLUMN and FLAG_COLUMNS
+# (space-separated) replace the default flux error column and flags.
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
@@ -26,6 +28,9 @@ SNN_MODEL=${3:-}
 SCONE_MODEL=${4:-}
 OUT=${OUT:-examples/results/edp2}
 BASELINE_FILE=${BASELINE_FILE:-}
+NIGHTLY_COADD=${NIGHTLY_COADD:-}
+FLUXERR_COLUMN=${FLUXERR_COLUMN:-}
+FLAG_COLUMNS=${FLAG_COLUMNS:-}
 for MODEL in "$SNN_MODEL" "$SCONE_MODEL"; do
     if [ -n "$MODEL" ] && [ ! -d "$MODEL" ]; then
         echo "$MODEL is not a model directory" >&2
@@ -34,21 +39,24 @@ for MODEL in "$SNN_MODEL" "$SCONE_MODEL"; do
 done
 mkdir -p "$OUT"
 
+CATALOG_ARGS=(${BASELINE_FILE:+--baseline-file "$BASELINE_FILE"} ${NIGHTLY_COADD:+--nightly-coadd})
+CATALOG_ARGS+=(${FLUXERR_COLUMN:+--fluxerr-column "$FLUXERR_COLUMN"} ${FLAG_COLUMNS:+--flag-columns $FLAG_COLUMNS})
+
 if [ -f "$CLASSIFIER" ]; then
     .venv/bin/python examples/classify_rubin_dia.py "$CATALOG" --method parsnip --classifier "$CLASSIFIER" \
-        --output "$OUT/parsnip.parquet" --results-dir "$OUT/hyrax" ${BASELINE_FILE:+--baseline-file "$BASELINE_FILE"}
+        --output "$OUT/parsnip.parquet" --results-dir "$OUT/hyrax" "${CATALOG_ARGS[@]}"
 else
     echo "No $CLASSIFIER: skipping ParSNIP"
 fi
 if [ -n "$SNN_MODEL" ]; then
     .venv/bin/python examples/classify_rubin_dia.py "$CATALOG" --method snn --model "$SNN_MODEL" \
-        --output "$OUT/snn_$(basename "$SNN_MODEL").parquet" --results-dir "$OUT/hyrax" ${BASELINE_FILE:+--baseline-file "$BASELINE_FILE"}
+        --output "$OUT/snn_$(basename "$SNN_MODEL").parquet" --results-dir "$OUT/hyrax" "${CATALOG_ARGS[@]}"
 else
     echo "No SNN_MODEL given: skipping SuperNNova"
 fi
 if [ -n "$SCONE_MODEL" ]; then
     .venv/bin/python examples/classify_rubin_dia.py "$CATALOG" --method scone --model "$SCONE_MODEL" \
-        --output "$OUT/scone_$(basename "$SCONE_MODEL").parquet" --results-dir "$OUT/hyrax" ${BASELINE_FILE:+--baseline-file "$BASELINE_FILE"}
+        --output "$OUT/scone_$(basename "$SCONE_MODEL").parquet" --results-dir "$OUT/hyrax" "${CATALOG_ARGS[@]}"
 else
     echo "No SCONE_MODEL given: skipping SCONE"
 fi

@@ -4,7 +4,8 @@
         [/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats] \\
         [--model NAME] [--output PREDICTIONS.parquet] \\
         [--redshift-column redshift] [--mwebv-column mwebv] [--photoz-column redshift] \\
-        [--baseline-file BASELINES.parquet]
+        [--baseline-file BASELINES.parquet] [--nightly-coadd [--nightly-clip-sigma 5]] \\
+        [--fluxerr-column COLUMN] [--flag-columns COLUMN [COLUMN ...]]
 
 Reads forced photometry on difference images (``diaObjectForcedSource``), drops flagged
 observations, and runs a pretrained model:
@@ -36,6 +37,12 @@ observations, and runs a pretrained model:
 ``--baseline-file`` (any method) corrects per-band baselines before classifying and keeps only the
 objects in that file: where ``{band}_B_applied`` is true, ``{band}_B`` is subtracted from the fluxes
 and ``{band}_B_err`` added in quadrature to their errors.
+
+``--nightly-coadd`` (any method) coadds each object's unflagged observations per night and band,
+inverse-variance weighted after a within-night clip at ``--nightly-clip-sigma``, before any baseline
+correction, so B and B_err apply to the nightly points. The models were not trained on nightly coadds.
+``--fluxerr-column`` and ``--flag-columns`` replace the default error column and flags, e.g. for
+``psfDiffFluxErr_corrected`` in catalogs that have it.
 
 The output has one row per ``diaObjectId`` with ``ra``, ``dec``, ``method``, ``model``, ``redshift_input``
 (whether the model was given each object's redshift), ``p_<class>``
@@ -83,6 +90,14 @@ def parse_args():
     parser.add_argument(
         "--baseline-file", help="Parquet of per-band baselines to correct; objects not in it are dropped"
     )
+    parser.add_argument(
+        "--nightly-coadd", action="store_true", help="Coadd observations per night and band before classifying"
+    )
+    parser.add_argument(
+        "--nightly-clip-sigma", type=float, help="Within-night |pull| clip of --nightly-coadd (default 5)"
+    )
+    parser.add_argument("--fluxerr-column", help="Nested flux error column (default psfDiffFluxErr)")
+    parser.add_argument("--flag-columns", nargs="+", help="Nested flag columns, replacing the default list")
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--results-dir", default=str(RESULTS / "hyrax"), help="Hyrax run directory")
 
@@ -114,6 +129,8 @@ def parse_args():
     used = [f"--{name.replace('_', '-')}" for name in other if getattr(args, name) not in (None, False)]
     if used:
         parser.error(f"{', '.join(used)} can't be used with --method {args.method}")
+    if args.nightly_clip_sigma is not None and not args.nightly_coadd:
+        parser.error("--nightly-clip-sigma needs --nightly-coadd")
 
     args.classifier_info = None
     if args.classifier:
@@ -189,6 +206,14 @@ def catalog_settings(base, args):
         settings["mwebv_column"] = args.mwebv_column
     if args.baseline_file:
         settings["baseline_file"] = args.baseline_file
+    if args.nightly_coadd:
+        settings["nightly_coadd"] = True
+    if args.nightly_clip_sigma is not None:
+        settings["nightly_clip_sigma"] = args.nightly_clip_sigma
+    if args.fluxerr_column:
+        settings["fluxerr_column"] = args.fluxerr_column
+    if args.flag_columns:
+        settings["flag_columns"] = args.flag_columns
     return settings
 
 

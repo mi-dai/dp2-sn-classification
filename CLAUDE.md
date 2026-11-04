@@ -18,7 +18,7 @@ shared dataset in `src/hyrax_lightcurves` (which also holds the shared training 
 - `nersc/prefetch.py` downloads what compute nodes may not reach: SuperNNova's pretrained models
   (`~/.cache/hyrax_snn`), the PLAsTiCC files (`data/plasticc_raw`, ~330 MB), and the simulation's passbands and
   templates; it checks the SFD dust map. Each step reports and continues on failure.
-- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/python -m pytest -q` (62 tests; the TensorFlow comparison is skipped without TensorFlow).
+- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/python -m pytest -q` (69 tests; the TensorFlow comparison is skipped without TensorFlow).
 - `desc-td-env` path is set in `nersc/setup_env.sh` (`TD_PYTHON`, overridable).
 
 ## Running jobs
@@ -74,6 +74,12 @@ classifier in `examples/models/`. If the classifier is missing it trains it in t
   per-band baselines in `/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/SN_candidates/RC_lcfit_input_122k.parquet`, applied to the
   visit-level light curves where `{band}_B_applied` (flux − B, B_err in quadrature); objects not in the file are dropped.
   Output of that run: `examples/results/edp2_rc122k_bc/`.
+- Nightly coadd is optional (`classify_rubin_dia.py --nightly-coadd`, `NIGHTLY_COADD=1` for `classify_edp2.sbatch`):
+  `src/hyrax_lightcurves/nightly.py` ports RC's `coadd_nightly` (5σ within-night clip, inverse-variance weights) and
+  reproduces RC's `lc_nightly` given the same visits. It runs before the baseline, so B_err is added per night. To match RC, use
+  `DP2_SN_samples/products/clean_v1/01_lightcurves.hats` (under `/global/cfs/cdirs/desc-sn/SNANA/SURVEYS/LSST/USERS/rcchen/`) with
+  `--fluxerr-column psfDiffFluxErr_corrected --flag-columns flag_pixel flag_err` (`FLUXERR_COLUMN=`, `FLAG_COLUMNS=`); our
+  EDP2 catalog has no corrected errors. The models were not trained on nightly coadds.
 - SuperNNova's input options (`--detection-snr`, `--no-time-window`, `--fink-exact`) are still being chosen by
   comparing them on the simulation; the defaults are a starting point.
 
