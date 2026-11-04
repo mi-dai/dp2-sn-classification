@@ -91,7 +91,7 @@ Slurm jobs for the long steps are in `nersc/` (`simulate_dp2`, `train_parsnip_cl
 with `CLASSIFIER` (default `examples/models/plasticc_classifier.pkl`; skipped if the file doesn't exist), the
 SuperNNova model directory `SNN_MODEL` and the SCONE model directory `SCONE_MODEL` (no defaults: each is
 skipped if not given; pass `""` for `SNN_MODEL` to run SCONE only). The Fink models are not run by these jobs.
-`classify_edp2` writes to `examples/results/edp2/`, or to `$OUT` if set (`OUT=examples/results/edp2_scone sbatch ...`). `CLAUDE.md` describes this setup for Claude Code.
+`classify_edp2` writes to `examples/results/edp2/`, or to `$OUT` if set (`OUT=examples/results/edp2_scone sbatch ...`). With `BASELINE_FILE=<parquet>` it corrects per-band baselines and classifies only the objects in that file (`classify_rubin_dia.py --baseline-file`): where `{band}_B_applied` is true, `{band}_B` is subtracted from the flux and `{band}_B_err` added in quadrature to its error. `CLAUDE.md` describes this setup for Claude Code.
 
 Extras: `notebook` (Jupyter), `sim` (lightcurvelynx, sncosmo, dustmaps, mocpy; included in `desc-td-env`).
 SuperNNova's pretrained models are downloaded on first use (see below); SuperNNova itself is not a

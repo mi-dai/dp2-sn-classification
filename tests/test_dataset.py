@@ -132,3 +132,72 @@ def test_rubin_schema_flux_scale_and_flags(hyrax_instance, tmp_path):
     np.testing.assert_allclose(lightcurve[:, 1], expected["flux"])
     np.testing.assert_allclose(lightcurve[:, 2], expected["fluxerr"])
     assert np.isnan(dataset.get_redshift(idx))
+
+
+def test_baseline_file(hyrax_instance, tmp_path):
+    """Baselines are corrected only where applied, before flux_scale; other objects are dropped."""
+    import lsdb
+    import nested_pandas as npd
+    import pandas as pd
+    from conftest import make_catalog_frames
+
+    base, flat = make_catalog_frames()
+    ids = np.arange(4, dtype=np.int64) + 10**15
+    base = base.iloc[:4].assign(diaObjectId=ids)[["diaObjectId", "ra", "dec"]]
+    flat = flat[flat.index < 4]
+    sources = pd.DataFrame(
+        {
+            "midpointMjdTai": flat["mjd"].to_numpy(),
+            "psfDiffFlux": flat["flux"].to_numpy(),
+            "psfDiffFluxErr": flat["fluxerr"].to_numpy(),
+            "band": flat["band"].to_numpy(),
+        },
+        index=flat.index,
+    )
+    nested = npd.NestedFrame(base).join_nested(sources, "diaObjectForcedSource")
+    path = tmp_path / "rubin_like"
+    lsdb.from_dataframe(nested, ra_column="ra", dec_column="dec").write_catalog(path)
+
+    # Objects 0 and 1 only: object 0 has g corrected; r has a B that is not applied.
+    baselines = pd.DataFrame({"diaObjectId": ids[:2]})
+    for band in "ugrizy":
+        baselines[f"{band}_B"] = np.nan
+        baselines[f"{band}_B_err"] = np.nan
+        baselines[f"{band}_B_applied"] = False
+    baselines.loc[0, ["g_B", "g_B_err", "g_B_applied"]] = [-100.0, 30.0, True]
+    baselines.loc[0, ["r_B", "r_B_err"]] = [50.0, 7.0]
+    baseline_file = tmp_path / "baselines.parquet"
+    baselines.to_parquet(baseline_file)
+
+    configure(hyrax_instance, path)
+    settings = {
+        "id_column": "diaObjectId",
+        "redshift_column": False,
+        "require_redshift": False,
+        "lightcurve_column": "diaObjectForcedSource",
+        "time_column": "midpointMjdTai",
+        "flux_column": "psfDiffFlux",
+        "fluxerr_column": "psfDiffFluxErr",
+        "flux_scale": 0.5,
+    }
+    for key, value in settings.items():
+        hyrax_instance.set_config(f"data_set.LightCurveHATSDataset.{key}", value)
+    raw = LightCurveHATSDataset(hyrax_instance.config, data_location=path)
+    hyrax_instance.set_config("data_set.LightCurveHATSDataset.baseline_file", str(baseline_file))
+    corrected = LightCurveHATSDataset(hyrax_instance.config, data_location=path)
+
+    assert len(raw) == 4
+    assert [corrected.get_object_id(i) for i in range(len(corrected))] == sorted(str(i) for i in ids[:2])
+
+    raw_row = [raw.get_object_id(i) for i in range(4)].index(str(ids[0]))
+    before = raw.get_lightcurve(raw_row)
+    after = corrected.get_lightcurve(0)
+    is_g = before[:, 3] == list(raw.band_names).index("g")
+    assert is_g.any() and (~is_g).any()
+    np.testing.assert_allclose(after[is_g, 1], before[is_g, 1] + 100.0 * 0.5)
+    np.testing.assert_allclose(after[is_g, 2], np.hypot(before[is_g, 2], 30.0 * 0.5))
+    np.testing.assert_array_equal(after[~is_g], before[~is_g])
+
+    # Object 1 has no applied band, so it is unchanged.
+    raw_row = [raw.get_object_id(i) for i in range(4)].index(str(ids[1]))
+    np.testing.assert_array_equal(corrected.get_lightcurve(1), raw.get_lightcurve(raw_row))

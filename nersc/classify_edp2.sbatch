@@ -15,6 +15,8 @@
 # snn_<dir name>; there is no default, and without it only ParSNIP runs. The Fink elasticc_ia model is no
 # longer run here. SCONE_MODEL is a SCONE model directory
 # (scone_train.sbatch), run as scone_<dir name> if given; its GP heatmaps are cached in data/scone_heatmaps.
+# With BASELINE_FILE set (BASELINE_FILE=<parquet> sbatch ...), per-band baselines from that file are corrected
+# and only the objects in it are classified.
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
@@ -23,6 +25,7 @@ CLASSIFIER=${2:-examples/models/plasticc_classifier.pkl}
 SNN_MODEL=${3:-}
 SCONE_MODEL=${4:-}
 OUT=${OUT:-examples/results/edp2}
+BASELINE_FILE=${BASELINE_FILE:-}
 for MODEL in "$SNN_MODEL" "$SCONE_MODEL"; do
     if [ -n "$MODEL" ] && [ ! -d "$MODEL" ]; then
         echo "$MODEL is not a model directory" >&2
@@ -33,19 +36,19 @@ mkdir -p "$OUT"
 
 if [ -f "$CLASSIFIER" ]; then
     .venv/bin/python examples/classify_rubin_dia.py "$CATALOG" --method parsnip --classifier "$CLASSIFIER" \
-        --output "$OUT/parsnip.parquet" --results-dir "$OUT/hyrax"
+        --output "$OUT/parsnip.parquet" --results-dir "$OUT/hyrax" ${BASELINE_FILE:+--baseline-file "$BASELINE_FILE"}
 else
     echo "No $CLASSIFIER: skipping ParSNIP"
 fi
 if [ -n "$SNN_MODEL" ]; then
     .venv/bin/python examples/classify_rubin_dia.py "$CATALOG" --method snn --model "$SNN_MODEL" \
-        --output "$OUT/snn_$(basename "$SNN_MODEL").parquet" --results-dir "$OUT/hyrax"
+        --output "$OUT/snn_$(basename "$SNN_MODEL").parquet" --results-dir "$OUT/hyrax" ${BASELINE_FILE:+--baseline-file "$BASELINE_FILE"}
 else
     echo "No SNN_MODEL given: skipping SuperNNova"
 fi
 if [ -n "$SCONE_MODEL" ]; then
     .venv/bin/python examples/classify_rubin_dia.py "$CATALOG" --method scone --model "$SCONE_MODEL" \
-        --output "$OUT/scone_$(basename "$SCONE_MODEL").parquet" --results-dir "$OUT/hyrax"
+        --output "$OUT/scone_$(basename "$SCONE_MODEL").parquet" --results-dir "$OUT/hyrax" ${BASELINE_FILE:+--baseline-file "$BASELINE_FILE"}
 else
     echo "No SCONE_MODEL given: skipping SCONE"
 fi

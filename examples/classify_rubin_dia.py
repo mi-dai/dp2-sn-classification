@@ -3,7 +3,8 @@
     python examples/classify_rubin_dia.py --method {parsnip,snn,scone} \\
         [/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats] \\
         [--model NAME] [--output PREDICTIONS.parquet] \\
-        [--redshift-column redshift] [--mwebv-column mwebv] [--photoz-column redshift]
+        [--redshift-column redshift] [--mwebv-column mwebv] [--photoz-column redshift] \\
+        [--baseline-file BASELINES.parquet]
 
 Reads forced photometry on difference images (``diaObjectForcedSource``), drops flagged
 observations, and runs a pretrained model:
@@ -31,6 +32,10 @@ observations, and runs a pretrained model:
   rescaled to its training zeropoint; the GP heatmaps are made as in training, in parallel
   (``--n-jobs``), and cached (``--heatmap-cache``). The model takes the redshift only if it was
   trained with one (then ``--redshift-column`` is required).
+
+``--baseline-file`` (any method) corrects per-band baselines before classifying and keeps only the
+objects in that file: where ``{band}_B_applied`` is true, ``{band}_B`` is subtracted from the fluxes
+and ``{band}_B_err`` added in quadrature to their errors.
 
 The output has one row per ``diaObjectId`` with ``ra``, ``dec``, ``method``, ``model``, ``redshift_input``
 (whether the model was given each object's redshift), ``p_<class>``
@@ -75,6 +80,9 @@ def parse_args():
     )
     parser.add_argument("--redshift-column", help="Per-object redshift column to use as model input")
     parser.add_argument("--mwebv-column", help="Per-object Milky Way E(B-V) column (default: no correction)")
+    parser.add_argument(
+        "--baseline-file", help="Parquet of per-band baselines to correct; objects not in it are dropped"
+    )
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--results-dir", default=str(RESULTS / "hyrax"), help="Hyrax run directory")
 
@@ -179,6 +187,8 @@ def catalog_settings(base, args):
         settings["redshift_column"] = args.redshift_column
     if args.mwebv_column:
         settings["mwebv_column"] = args.mwebv_column
+    if args.baseline_file:
+        settings["baseline_file"] = args.baseline_file
     return settings
 
 

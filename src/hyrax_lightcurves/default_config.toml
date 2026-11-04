@@ -32,6 +32,12 @@ band_column = "band"
 # 10**(-0.4 * (31.4 - 27.5)) = 0.027542287.
 flux_scale = 1.0
 
+# Parquet file with per-object, per-band baselines, or false for no correction. Needs the
+# id column and {band}_B, {band}_B_err, {band}_B_applied. Where applied, B is subtracted from
+# the flux and B_err added in quadrature to fluxerr, in catalog flux units. Objects not in
+# the file are dropped.
+baseline_file = false
+
 # Nested boolean sub-columns (e.g. Rubin "psfDiffFlux_flag", "pixelFlags_saturated").
 # Observations with any of them set are dropped.
 flag_columns = []

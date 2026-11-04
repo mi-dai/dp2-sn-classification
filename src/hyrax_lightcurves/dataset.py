@@ -20,6 +20,11 @@ class LightCurveHATSDataset(HyraxDataset):
     sets the band map and flux scale its model needs. Model-specific processing (time
     windows, grouping, normalization) happens in the models, not here.
 
+    With a ``baseline_file`` (parquet, one row per object), each object's per-band baseline is
+    corrected and objects not in the file are dropped: where ``{band}_B_applied`` is true,
+    ``{band}_B`` is subtracted from the flux and ``{band}_B_err`` added in quadrature to fluxerr,
+    both in catalog flux units (before ``flux_scale``).
+
     Fields
     ------
     object_id : str
@@ -65,7 +70,34 @@ class LightCurveHATSDataset(HyraxDataset):
         # The HATS index (_healpix_29) is not unique, so switch to positional rows.
         return catalog.compute().reset_index(drop=True)
 
+    def _baseline_correction(self, frame, settings: dict):
+        """`frame` restricted to the objects in ``baseline_file``, and their (n_objects, n_bands)
+        baselines and baseline errors, 0 where not applied."""
+        import pandas as pd
+
+        id_column = settings["id_column"]
+        columns = [f"{band}_{name}" for band in self.band_names for name in ("B", "B_err", "B_applied")]
+        table = pd.read_parquet(settings["baseline_file"], columns=[id_column] + columns).set_index(id_column)
+
+        in_file = frame[id_column].isin(table.index).to_numpy()
+        if not in_file.all():
+            logger.info(f"LightCurveHATSDataset: dropped {(~in_file).sum()}/{len(frame)} objects not in the baseline file.")
+        frame = frame[in_file].reset_index(drop=True)
+
+        table = table.loc[frame[id_column].to_numpy()]
+        applied = table[[f"{band}_B_applied" for band in self.band_names]].to_numpy(dtype=bool)
+        baseline = np.where(applied, table[[f"{band}_B" for band in self.band_names]].to_numpy(dtype=np.float64), 0.0)
+        baseline_err = np.where(applied, table[[f"{band}_B_err" for band in self.band_names]].to_numpy(dtype=np.float64), 0.0)
+        logger.info(
+            f"LightCurveHATSDataset: baseline corrected {applied.sum()} bands of {applied.any(axis=1).sum()}"
+            f"/{len(frame)} objects."
+        )
+        return frame, baseline, baseline_err
+
     def _build_arrays(self, frame, settings: dict):
+        baseline_file = settings.get("baseline_file")
+        if baseline_file:
+            frame, baseline, baseline_err = self._baseline_correction(frame, settings)
         n_objects = len(frame)
 
         flat = frame[settings["lightcurve_column"]].nest.to_flat()
@@ -77,6 +109,14 @@ class LightCurveHATSDataset(HyraxDataset):
         band_index = (
             flat[settings["band_column"]].astype(str).map(band_lookup).fillna(-1).to_numpy(dtype=np.int64)
         )
+
+        if baseline_file:
+            known = band_index >= 0
+            flux_offset, added_err = np.zeros(len(flux)), np.zeros(len(flux))
+            flux_offset[known] = baseline[row[known], band_index[known]]
+            added_err[known] = baseline_err[row[known], band_index[known]]
+            flux = flux - flux_offset
+            fluxerr = np.hypot(fluxerr, added_err)
 
         # Convert fluxes to the zeropoint the model was trained with.
         flux_scale = float(settings.get("flux_scale", 1.0))
