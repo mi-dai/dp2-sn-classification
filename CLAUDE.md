@@ -79,7 +79,7 @@ classifier in `examples/models/`. If the classifier is missing it trains it in t
   reproduces RC's `lc_nightly` given the same visits. It runs before the baseline, so B_err is added per night. To match RC, use
   `DP2_SN_samples/products/clean_v1/01_lightcurves.hats` (under `/global/cfs/cdirs/desc-sn/SNANA/SURVEYS/LSST/USERS/rcchen/`) with
   `--fluxerr-column psfDiffFluxErr_corrected --flag-columns flag_pixel flag_err` (`FLUXERR_COLUMN=`, `FLAG_COLUMNS=`); our
-  EDP2 catalog has no corrected errors. The models were not trained on nightly coadds.
+  EDP2 catalog has no corrected errors. PLAsTiCC, used to train ParSNIP's classifier and our SNN and SCONE models, has about one point per night and band, so nightly input is closer to that training cadence than DP2 visits are.
 - SuperNNova's input options (`--detection-snr`, `--no-time-window`, `--fink-exact`) are still being chosen by
   comparing them on the simulation; the defaults are a starting point.
 

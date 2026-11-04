@@ -40,7 +40,8 @@ and ``{band}_B_err`` added in quadrature to their errors.
 
 ``--nightly-coadd`` (any method) coadds each object's unflagged observations per night and band,
 inverse-variance weighted after a within-night clip at ``--nightly-clip-sigma``, before any baseline
-correction, so B and B_err apply to the nightly points. The models were not trained on nightly coadds.
+correction, so B and B_err apply to the nightly points. PLAsTiCC has about one point per night and band,
+so nightly input is closer to the training cadence of the models trained on it than DP2 visits are.
 ``--fluxerr-column`` and ``--flag-columns`` replace the default error column and flags, e.g. for
 ``psfDiffFluxErr_corrected`` in catalogs that have it.
 
