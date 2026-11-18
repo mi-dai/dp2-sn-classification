@@ -263,3 +263,61 @@ def test_nightly_coadd(hyrax_instance, tmp_path):
     np.testing.assert_allclose(nightly[:, 1], 150.0 * 0.5)
     # B_err is added once per night, not averaged down by the 3 visits.
     np.testing.assert_allclose(nightly[:, 2], np.hypot(12.0 / np.sqrt(3), 30.0) * 0.5)
+
+
+def test_other_lightcurve_column_without_flags(hyrax_instance, tmp_path):
+    """A second nested light curve (e.g. lc_nightly) is read with its own time column and no flags."""
+    import lsdb
+    import nested_pandas as npd
+    import pandas as pd
+    from conftest import make_catalog_frames
+
+    base, flat = make_catalog_frames()
+    base = base.iloc[:3].assign(diaObjectId=np.arange(3, dtype=np.int64) + 10**15)[["diaObjectId", "ra", "dec"]]
+    flat = flat[flat.index < 3]
+    visits = pd.DataFrame(
+        {
+            "midpointMjdTai": flat["mjd"].to_numpy(),
+            "psfDiffFlux": np.full(len(flat), 1e6),  # must not be read
+            "psfDiffFluxErr": np.ones(len(flat)),
+            "band": flat["band"].to_numpy(),
+            "bad": np.ones(len(flat), dtype=bool),  # all visits flagged
+        },
+        index=flat.index,
+    )
+    nightly = pd.DataFrame(
+        {
+            "nightMjd": flat["mjd"].to_numpy(),
+            "psfDiffFlux": flat["flux"].to_numpy(),
+            "psfDiffFluxErr": flat["fluxerr"].to_numpy(),
+            "band": flat["band"].to_numpy(),
+        },
+        index=flat.index,
+    )
+    nested = npd.NestedFrame(base).join_nested(visits, "diaObjectForcedSource").join_nested(nightly, "lc_nightly")
+    path = tmp_path / "two_lightcurves"
+    lsdb.from_dataframe(nested, ra_column="ra", dec_column="dec").write_catalog(path)
+
+    configure(hyrax_instance, path)
+    for key, value in {
+        "id_column": "diaObjectId",
+        "redshift_column": False,
+        "require_redshift": False,
+        "lightcurve_column": "lc_nightly",
+        "time_column": "nightMjd",
+        "flux_column": "psfDiffFlux",
+        "fluxerr_column": "psfDiffFluxErr",
+        "flux_scale": 1.0,
+        "flag_columns": [],
+    }.items():
+        hyrax_instance.set_config(f"data_set.LightCurveHATSDataset.{key}", value)
+    dataset = LightCurveHATSDataset(hyrax_instance.config, data_location=path)
+
+    assert len(dataset) == 3
+    for i in range(3):
+        obj = int(dataset.get_object_id(i)) - 10**15
+        expected = flat[flat.index == obj]
+        lightcurve = dataset.get_lightcurve(i)
+        np.testing.assert_allclose(lightcurve[:, 0], expected["mjd"])
+        np.testing.assert_allclose(lightcurve[:, 1], expected["flux"])
+        np.testing.assert_allclose(lightcurve[:, 2], expected["fluxerr"])

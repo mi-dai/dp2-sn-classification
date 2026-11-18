@@ -18,7 +18,7 @@ shared dataset in `src/hyrax_lightcurves` (which also holds the shared training 
 - `nersc/prefetch.py` downloads what compute nodes may not reach: SuperNNova's pretrained models
   (`~/.cache/hyrax_snn`), the PLAsTiCC files (`data/plasticc_raw`, ~330 MB), and the simulation's passbands and
   templates; it checks the SFD dust map. Each step reports and continues on failure.
-- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/python -m pytest -q` (69 tests; the TensorFlow comparison is skipped without TensorFlow).
+- Use `.venv/bin/python` (no activation needed). Check the install with `.venv/bin/python -m pytest -q` (73 tests; the TensorFlow comparison is skipped without TensorFlow).
 - `desc-td-env` path is set in `nersc/setup_env.sh` (`TD_PYTHON`, overridable).
 
 ## Running jobs
@@ -79,7 +79,8 @@ classifier in `examples/models/`. If the classifier is missing it trains it in t
   reproduces RC's `lc_nightly` given the same visits. It runs before the baseline, so B_err is added per night. To match RC, use
   `DP2_SN_samples/products/clean_v1/01_lightcurves.hats` (under `/global/cfs/cdirs/desc-sn/SNANA/SURVEYS/LSST/USERS/rcchen/`) with
   `--fluxerr-column psfDiffFluxErr_corrected --flag-columns flag_pixel flag_err` (`FLUXERR_COLUMN=`, `FLAG_COLUMNS=`); our
-  EDP2 catalog has no corrected errors. PLAsTiCC, used to train ParSNIP's classifier and our SNN and SCONE models, has about one point per night and band, so nightly input is closer to that training cadence than DP2 visits are.
+  EDP2 catalog has no corrected errors. Or read RC's own `lc_nightly` directly, as RC's SNANA files do: `--lightcurve-column lc_nightly
+  --fluxerr-column psfDiffFluxErr_corrected --flag-columns` (no flags; `LIGHTCURVE_COLUMN=lc_nightly FLAG_COLUMNS=none`), without the coadd. PLAsTiCC, used to train ParSNIP's classifier and our SNN and SCONE models, has about one point per night and band, so nightly input is closer to that training cadence than DP2 visits are.
 - SuperNNova's input options (`--detection-snr`, `--no-time-window`, `--fink-exact`) are still being chosen by
   comparing them on the simulation; the defaults are a starting point.
 

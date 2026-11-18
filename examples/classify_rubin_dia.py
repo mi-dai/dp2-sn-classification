@@ -5,7 +5,8 @@
         [--model NAME] [--output PREDICTIONS.parquet] \\
         [--redshift-column redshift] [--mwebv-column mwebv] [--photoz-column redshift] \\
         [--baseline-file BASELINES.parquet] [--nightly-coadd [--nightly-clip-sigma 5]] \\
-        [--fluxerr-column COLUMN] [--flag-columns COLUMN [COLUMN ...]]
+        [--fluxerr-column COLUMN] [--flag-columns [COLUMN ...]] \\
+        [--lightcurve-column diaObjectForcedSource] [--time-column midpointMjdTai]
 
 Reads forced photometry on difference images (``diaObjectForcedSource``), drops flagged
 observations, and runs a pretrained model:
@@ -43,7 +44,10 @@ inverse-variance weighted after a within-night clip at ``--nightly-clip-sigma``,
 correction, so B and B_err apply to the nightly points. PLAsTiCC has about one point per night and band,
 so nightly input is closer to the training cadence of the models trained on it than DP2 visits are.
 ``--fluxerr-column`` and ``--flag-columns`` replace the default error column and flags, e.g. for
-``psfDiffFluxErr_corrected`` in catalogs that have it.
+``psfDiffFluxErr_corrected`` in catalogs that have it; ``--flag-columns`` with no names uses no flags.
+``--lightcurve-column`` and ``--time-column`` read another nested light curve with the same band and flux
+columns, e.g. an already nightly-coadded one: ``--lightcurve-column lc_nightly --fluxerr-column
+psfDiffFluxErr_corrected --flag-columns`` reads R. Chen's ``lc_nightly`` (then without ``--nightly-coadd``).
 
 The output has one row per ``diaObjectId`` with ``ra``, ``dec``, ``method``, ``model``, ``redshift_input``
 (whether the model was given each object's redshift), ``p_<class>``
@@ -98,7 +102,11 @@ def parse_args():
         "--nightly-clip-sigma", type=float, help="Within-night |pull| clip of --nightly-coadd (default 5)"
     )
     parser.add_argument("--fluxerr-column", help="Nested flux error column (default psfDiffFluxErr)")
-    parser.add_argument("--flag-columns", nargs="+", help="Nested flag columns, replacing the default list")
+    parser.add_argument(
+        "--flag-columns", nargs="*", help="Nested flag columns, replacing the default list (none: no flags)"
+    )
+    parser.add_argument("--lightcurve-column", help="Nested light-curve column (default diaObjectForcedSource)")
+    parser.add_argument("--time-column", help="Nested time column (default midpointMjdTai)")
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--results-dir", default=str(RESULTS / "hyrax"), help="Hyrax run directory")
 
@@ -213,8 +221,12 @@ def catalog_settings(base, args):
         settings["nightly_clip_sigma"] = args.nightly_clip_sigma
     if args.fluxerr_column:
         settings["fluxerr_column"] = args.fluxerr_column
-    if args.flag_columns:
-        settings["flag_columns"] = args.flag_columns
+    if args.flag_columns is not None:
+        settings["flag_columns"] = list(args.flag_columns)
+    if args.lightcurve_column:
+        settings["lightcurve_column"] = args.lightcurve_column
+    if args.time_column:
+        settings["time_column"] = args.time_column
     return settings
 
 

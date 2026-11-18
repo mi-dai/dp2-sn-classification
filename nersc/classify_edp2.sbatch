@@ -18,7 +18,9 @@
 # With BASELINE_FILE set (BASELINE_FILE=<parquet> sbatch ...), per-band baselines from that file are corrected
 # and only the objects in it are classified.
 # With NIGHTLY_COADD=1, observations are coadded per night and band first. FLUXERR_COLUMN and FLAG_COLUMNS
-# (space-separated) replace the default flux error column and flags.
+# (space-separated; FLAG_COLUMNS=none for no flags) replace the default flux error column and flags.
+# LIGHTCURVE_COLUMN and TIME_COLUMN read another nested light curve, e.g. R. Chen's nightly coadd:
+# LIGHTCURVE_COLUMN=lc_nightly FLUXERR_COLUMN=psfDiffFluxErr_corrected FLAG_COLUMNS=none (without NIGHTLY_COADD).
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 
@@ -31,6 +33,8 @@ BASELINE_FILE=${BASELINE_FILE:-}
 NIGHTLY_COADD=${NIGHTLY_COADD:-}
 FLUXERR_COLUMN=${FLUXERR_COLUMN:-}
 FLAG_COLUMNS=${FLAG_COLUMNS:-}
+LIGHTCURVE_COLUMN=${LIGHTCURVE_COLUMN:-}
+TIME_COLUMN=${TIME_COLUMN:-}
 for MODEL in "$SNN_MODEL" "$SCONE_MODEL"; do
     if [ -n "$MODEL" ] && [ ! -d "$MODEL" ]; then
         echo "$MODEL is not a model directory" >&2
@@ -40,7 +44,14 @@ done
 mkdir -p "$OUT"
 
 CATALOG_ARGS=(${BASELINE_FILE:+--baseline-file "$BASELINE_FILE"} ${NIGHTLY_COADD:+--nightly-coadd})
-CATALOG_ARGS+=(${FLUXERR_COLUMN:+--fluxerr-column "$FLUXERR_COLUMN"} ${FLAG_COLUMNS:+--flag-columns $FLAG_COLUMNS})
+CATALOG_ARGS+=(${FLUXERR_COLUMN:+--fluxerr-column "$FLUXERR_COLUMN"})
+if [ "$FLAG_COLUMNS" = none ]; then
+    CATALOG_ARGS+=(--flag-columns)
+elif [ -n "$FLAG_COLUMNS" ]; then
+    CATALOG_ARGS+=(--flag-columns $FLAG_COLUMNS)
+fi
+CATALOG_ARGS+=(${LIGHTCURVE_COLUMN:+--lightcurve-column "$LIGHTCURVE_COLUMN"} ${TIME_COLUMN:+--time-column "$TIME_COLUMN"})
+echo "Catalog options: ${CATALOG_ARGS[*]}"
 
 if [ -f "$CLASSIFIER" ]; then
     .venv/bin/python examples/classify_rubin_dia.py "$CATALOG" --method parsnip --classifier "$CLASSIFIER" \
