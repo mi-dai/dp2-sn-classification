@@ -16,7 +16,7 @@
 # SNN_MODEL is a SuperNNova model directory (snn_train.sbatch, or one written by SuperNNova), run as
 # snn_<dir name>; there is no default, and without it only ParSNIP runs. The Fink models (elasticc_ia,
 # elasticc_broad) are no longer validated here. SCONE_MODEL is a SCONE model directory (scone_train.sbatch),
-# run as scone_<dir name> if given; its GP heatmaps are cached in data/scone_heatmaps.
+# run as scone_<dir name> if given; its GP heatmaps are cached in $PSCRATCH/dp2-sn-classification/data/scone_heatmaps.
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 

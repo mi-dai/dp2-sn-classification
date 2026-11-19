@@ -403,7 +403,9 @@ The heatmap constants are in SCONE's FLUXCAL units (zeropoint 27.5), so Rubin nJ
 made when the dataset (`SconeHATSDataset`, a `LightCurveHATSDataset` with a `heatmap` field) is created, with
 the GP fits in parallel (`[data_set.SconeHATSDataset] n_jobs`, default Slurm's `SLURM_CPUS_PER_TASK`, else
 all CPUs: one process per thread of a full node ran out of memory), and saved in `cache_dir`
-(one `.npy` per catalog and settings; the scripts use `data/scone_heatmaps/`), so training epochs, resumed runs
+(one `.npy` per catalog and settings; the scripts use `hyrax_scone.default_cache_dir`: `$SCONE_HEATMAP_CACHE` if set,
+else `$PSCRATCH/dp2-sn-classification/data/scone_heatmaps/` at NERSC, since an EDP2 cache is ~5.6 GB and the home
+quota is 40 GB, else `data/scone_heatmaps/`), so training epochs, resumed runs
 and later classification reuse them. A fit takes 0.2–2 s; the PLAsTiCC training set (7,848 objects) takes
 about 1.5 min on an Apple M-series CPU. BLAS runs on one thread per process during the fits: at NERSC each
 worker otherwise started 128 OpenBLAS threads and a heatmap took ~20 s instead of ~0.1 s.

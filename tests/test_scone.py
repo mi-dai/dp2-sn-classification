@@ -296,3 +296,15 @@ def test_with_z_model_needs_redshift(hyrax_instance, hats_catalog, tmp_path):
     predictions = load_predictions(hyrax_instance.infer())
     assert len(predictions) == N_OBJECTS and (predictions["predicted_class"] != "").all()
     assert json.loads((output / "scone_model.json").read_text())["redshift_error"] == 0.01
+
+
+def test_default_cache_dir(monkeypatch, tmp_path):
+    from hyrax_scone import default_cache_dir
+
+    monkeypatch.delenv("SCONE_HEATMAP_CACHE", raising=False)
+    monkeypatch.delenv("PSCRATCH", raising=False)
+    assert default_cache_dir(tmp_path) == tmp_path / "scone_heatmaps"
+    monkeypatch.setenv("PSCRATCH", "/scratch/me")
+    assert str(default_cache_dir(tmp_path)) == "/scratch/me/dp2-sn-classification/data/scone_heatmaps"
+    monkeypatch.setenv("SCONE_HEATMAP_CACHE", str(tmp_path / "x"))
+    assert default_cache_dir(tmp_path) == tmp_path / "x"

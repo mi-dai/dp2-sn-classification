@@ -20,6 +20,17 @@ from hyrax_scone.heatmaps import (
 logger = logging.getLogger(__name__)
 
 
+def default_cache_dir(repo_data: Path | str) -> Path:
+    """Default heatmap cache of the scripts: ``$SCONE_HEATMAP_CACHE`` if set, else on scratch
+    (``$PSCRATCH/dp2-sn-classification/data/scone_heatmaps``; the caches of EDP2-sized catalogs are several
+    GB, too large for the NERSC home quota), else ``<repo_data>/scone_heatmaps``."""
+    if os.environ.get("SCONE_HEATMAP_CACHE"):
+        return Path(os.environ["SCONE_HEATMAP_CACHE"])
+    if os.environ.get("PSCRATCH"):
+        return Path(os.environ["PSCRATCH"]) / "dp2-sn-classification" / "data" / "scone_heatmaps"
+    return Path(repo_data) / "scone_heatmaps"
+
+
 class SconeHATSDataset(LightCurveHATSDataset):
     """`LightCurveHATSDataset` plus each object's SCONE heatmap (field ``heatmap``).
 

@@ -68,7 +68,7 @@ import hyrax_snn
 
 DEFAULT_CATALOG = "/global/cfs/cdirs/lsst/groups/TD/SN/EDP2/for_fastdb/subsample_joined.hats"
 RESULTS = Path(__file__).resolve().parent / "results"  # default output location (examples/results/)
-DEFAULT_HEATMAP_CACHE = Path(__file__).resolve().parent.parent / "data" / "scone_heatmaps"
+DEFAULT_HEATMAP_CACHE = hyrax_scone.default_cache_dir(Path(__file__).resolve().parent.parent / "data")
 PARSNIP_MODELS = ["plasticc", "plasticc_photoz", "ps1"]
 PARSNIP_OPTIONS = ["classifier", "photoz_column", "photoz_error"]
 SNN_OPTIONS = ["fink_exact", "detection_snr", "no_time_window", "fix_clipped_min"]
@@ -130,7 +130,8 @@ def parse_args():
     scone_group = parser.add_argument_group("scone only")
     scone_group.add_argument("--n-jobs", type=int, help="Processes for the GP heatmaps (default: all CPUs)")
     scone_group.add_argument(
-        "--heatmap-cache", help="Heatmap cache directory (default data/scone_heatmaps; '' for none)"
+        "--heatmap-cache", help="Heatmap cache directory (default $SCONE_HEATMAP_CACHE, else "
+        "$PSCRATCH/dp2-sn-classification/data/scone_heatmaps, else data/scone_heatmaps; '' for none)"
     )
 
     args = parser.parse_args()

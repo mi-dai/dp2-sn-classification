@@ -4,7 +4,7 @@ examples/scone_train.py), and models trained with SCONE itself (TensorFlow) are 
 
 from hyrax_scone.config import RUBIN_DIA_SETTINGS, SCONE_BAND_MAP, configure, rubin_dia_settings
 from hyrax_scone.convert import resolve_model_dir
-from hyrax_scone.dataset import SconeHATSDataset
+from hyrax_scone.dataset import SconeHATSDataset, default_cache_dir
 from hyrax_scone.model import HyraxSCONE
 from hyrax_scone.predictions import load_predictions
 from hyrax_scone.training import load_model_info, new_model_dir, training_dataset
@@ -15,6 +15,7 @@ __all__ = [
     "HyraxSCONE",
     "SconeHATSDataset",
     "configure",
+    "default_cache_dir",
     "load_model_info",
     "load_predictions",
     "new_model_dir",

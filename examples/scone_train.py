@@ -39,7 +39,7 @@ from hyrax_lightcurves.training import find_checkpoint
 
 EXAMPLES = Path(__file__).resolve().parent
 DEFAULT_OUTPUT = EXAMPLES / "models" / "scone_plasticc"
-DEFAULT_CACHE = EXAMPLES.parent / "data" / "scone_heatmaps"
+DEFAULT_CACHE = hyrax_scone.default_cache_dir(EXAMPLES.parent / "data")
 
 
 def main():
@@ -60,7 +60,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--n-jobs", type=int, default=0, help="Processes for the GP fits (0: all CPUs)")
     parser.add_argument(
-        "--cache-dir", default=str(DEFAULT_CACHE), help="Heatmap cache (default data/scone_heatmaps)"
+        "--cache-dir", default=str(DEFAULT_CACHE), help=f"Heatmap cache (default {DEFAULT_CACHE})"
     )
     parser.add_argument(
         "--results-dir", default=str(EXAMPLES / "results" / "hyrax"), help="Hyrax run directory"
