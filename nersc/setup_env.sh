@@ -4,6 +4,7 @@
 #
 # - .venv on top of desc-td-env (which provides lightcurvelynx, sncosmo, dustmaps for the simulation)
 # - the package with the notebook and dev extras; supernnova (--no-deps) for the reference tests
+# - baselineflux (GitHub, pinned, --no-deps), to refit RC's baselines (examples/results/tns_edp2_93/tns_cutflow.py)
 # - the Jupyter kernel "dp2-sn-classification (td_env)"
 # - downloads that compute nodes may not be able to do (nersc/prefetch.py)
 set -euo pipefail
@@ -21,6 +22,9 @@ fi
 .venv/bin/pip install -q -e ".[notebook,dev]"
 # Only for tests/test_snn_reference.py: supernnova pins pandas<3, so never install its dependencies.
 .venv/bin/pip install -q --no-deps supernnova==3.0.51 natsort seaborn
+# v0.1.0; reproduces RC's clean_v1 baselines. Needs only numpy and scipy (in desc-td-env).
+.venv/bin/pip install -q --no-deps \
+    "git+https://github.com/ConnorStoneAstro/baselineflux.git@be84db5ca79f7c2a048bbcbcd263f19af5aa8977"
 
 .venv/bin/python -m ipykernel install --user --name dp2-sn-classification-td \
     --display-name "dp2-sn-classification (td_env)"
